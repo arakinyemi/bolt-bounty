@@ -4,14 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lnd:check": "node --env-file=../../.env --import tsx src/scripts/lnd-check.ts"
+    "lnd:check": "node --env-file=../../.env --import tsx src/scripts/lnd-check.ts",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@boltbounty/shared": "workspace:*",
+    "better-sqlite3": "^12.2.0",
     "undici": "^7.10.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
   }
 }
