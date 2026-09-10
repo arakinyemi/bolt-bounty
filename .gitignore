@@ -6,3 +6,4 @@ data/
 *.cert
 *.key
 .DS_Store
+.gstack/
