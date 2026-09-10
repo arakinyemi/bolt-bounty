@@ -76,4 +76,10 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: Ctx): void {
     const user = requireUser(ctx.db, req);
     return github.pulls(user.accessToken, `${req.params.owner}/${req.params.repo}`, user.login);
   });
+
+  app.get<{ Params: { owner: string; repo: string } }>("/github/repos/:owner/:repo/issues", async (req) =>
+    github.issues(requireUser(ctx.db, req).accessToken, `${req.params.owner}/${req.params.repo}`));
+
+  app.get<{ Params: { owner: string; repo: string; number: string } }>("/github/repos/:owner/:repo/issues/:number", async (req) =>
+    github.issue(requireUser(ctx.db, req).accessToken, `${req.params.owner}/${req.params.repo}`, Number(req.params.number)));
 }

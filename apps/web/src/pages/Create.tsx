@@ -1,10 +1,11 @@
-import type { Bounty, BountyStatus, GithubRepo } from "@boltbounty/shared";
+import type { Bounty, BountyStatus, GithubIssue, GithubRepo } from "@boltbounty/shared";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { api, signInUrl, subscribe } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
+import { api, parseIssueUrl, signInUrl, subscribe } from "../api";
 import { useAuth } from "../auth";
 import { CopyButton, Hash } from "../components/Copy";
+import { IssuePicker } from "../components/IssuePicker";
 import { Progress } from "../components/Progress";
 import { RepoPicker } from "../components/RepoPicker";
 import { StatusPill } from "../components/StatusPill";
@@ -18,9 +19,36 @@ export function Create() {
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [status, setStatus] = useState<BountyStatus>("unfunded");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
+  const [issue, setIssue] = useState<GithubIssue | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [amount, setAmount] = useState(20_000);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [params] = useSearchParams();
+
+  // "Fund from GitHub": /new?issue=https://github.com/owner/repo/issues/123
+  // arrives with the repo and issue preselected.
+  useEffect(() => {
+    const parsed = parseIssueUrl(params.get("issue") ?? "");
+    if (!parsed || !me || me.role !== "poster") return;
+    const [owner, name] = parsed.fullName.split("/") as [string, string];
+    setRepo({ fullName: parsed.fullName, name, owner, url: `https://github.com/${parsed.fullName}`, description: null, private: false, updatedAt: "" });
+    api.issue(parsed.fullName, parsed.number).then(pickIssue).catch((e: Error) => setError(e.message));
+  }, [params, me]);
+
+  function pickIssue(i: GithubIssue | null) {
+    setIssue(i);
+    if (i) {
+      setTitle(i.title);
+      setDescription(i.body || `Resolve ${i.url}`);
+    }
+  }
+
+  function pickRepo(r: GithubRepo | null) {
+    setRepo(r);
+    setIssue(null);
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -32,6 +60,7 @@ export function Create() {
         title: String(f.get("title")),
         description: String(f.get("description")),
         repoFullName: repo?.fullName ?? null,
+        issueNumber: issue?.number ?? null,
         repoUrl: null,
         amountSats: amount,
       });
@@ -92,13 +121,18 @@ export function Create() {
 
       <Card className="space-y-5">
         <Field id="repo" label="Repository" hint="Workers will submit a pull request against this repo.">
-          <RepoPicker value={repo} onChange={setRepo} />
+          <RepoPicker value={repo} onChange={pickRepo} />
         </Field>
+        {repo && (
+          <Field id="issue" label="GitHub issue" hint="Optional. Ties the bounty to the issue: the title and brief prefill, and BoltBounty comments on the issue when it is funded and paid.">
+            <IssuePicker repoFullName={repo.fullName} value={issue} onChange={pickIssue} />
+          </Field>
+        )}
         <Field id="title" label="Title">
-          <Input id="title" name="title" required minLength={3} maxLength={120} placeholder="Fix broken link in README" />
+          <Input id="title" name="title" required minLength={3} maxLength={120} placeholder="Fix broken link in README" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         <Field id="description" label="What needs doing" hint="Say how you will judge it done. Workers read this before they start.">
-          <Textarea id="description" name="description" required rows={4} placeholder="The docs link in the README returns 404. Fix it and open a PR." />
+          <Textarea id="description" name="description" required rows={4} placeholder="The docs link in the README returns 404. Fix it and open a PR." value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
         <Field id="amount" label="Reward" hint="100 to 1,000,000 sats. The worker's payout invoice must match this exactly.">
           <div className="mt-1.5 flex flex-wrap gap-2">

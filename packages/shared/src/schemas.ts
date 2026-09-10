@@ -16,6 +16,7 @@ export const createBountySchema = z.object({
   description: z.string().trim().min(1).max(5000),
   repoUrl: optionalUrl,
   repoFullName: z.string().regex(REPO_FULL_NAME, "expected owner/name").optional().nullable(),
+  issueNumber: z.number().int().positive().optional().nullable(),
   amountSats: z.number().int().min(MIN_AMOUNT_SATS).max(MAX_AMOUNT_SATS),
   expiresInSeconds: z.number().int().min(600).max(7 * 86400).optional(),
 });

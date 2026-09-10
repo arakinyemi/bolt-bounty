@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS bounties (
   description         TEXT NOT NULL,
   repo_url            TEXT,
   repo_full_name      TEXT,                 -- owner/name on GitHub, when picked from the poster's repos
+  issue_number        INTEGER,              -- GitHub issue on repo_full_name this bounty funds
+  issue_url           TEXT,
+  issue_title         TEXT,
   poster_user_id      TEXT NOT NULL REFERENCES users(id),
   amount_sats         INTEGER NOT NULL CHECK (amount_sats > 0),
   status              TEXT NOT NULL CHECK (status IN ('unfunded','funded','submitted','paid','cancelled','expired')),

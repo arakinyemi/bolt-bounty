@@ -32,6 +32,9 @@ export interface Bounty {
   description: string;
   repoUrl: string | null;
   repoFullName: string | null;  // owner/name when chosen from the poster's GitHub repos
+  issueNumber: number | null;   // GitHub issue this bounty funds, on repoFullName
+  issueUrl: string | null;
+  issueTitle: string | null;
   posterUserId: string;
   poster: UserRef;
   amountSats: number;
@@ -104,4 +107,15 @@ export interface GithubPull {
   draft: boolean;
   updatedAt: string;
   mine: boolean;
+  linkedIssues: number[];   // issue numbers referenced in the title or body
+}
+
+export interface GithubIssue {
+  number: number;
+  title: string;
+  url: string;
+  body: string;             // trimmed to a short excerpt
+  author: string;
+  labels: string[];
+  updatedAt: string;
 }

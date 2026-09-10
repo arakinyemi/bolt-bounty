@@ -55,6 +55,9 @@ export function BountyDetail() {
             ) : bounty.repoUrl ? (
               <a href={bounty.repoUrl} target="_blank" rel="noreferrer"><Tag>{new URL(bounty.repoUrl).hostname} ↗</Tag></a>
             ) : null}
+            {bounty.issueUrl && bounty.issueNumber && (
+              <a href={bounty.issueUrl} target="_blank" rel="noreferrer" title={bounty.issueTitle ?? undefined}><Tag tone="green">Issue #{bounty.issueNumber} ↗</Tag></a>
+            )}
             <StatusPill status={bounty.status} />
           </div>
           <h1 className="display text-3xl sm:text-5xl">{bounty.title}</h1>
@@ -68,6 +71,12 @@ export function BountyDetail() {
 
         <Card>
           <CardTitle>Brief</CardTitle>
+          {bounty.issueUrl && (
+            <p className="mb-3 text-sm">
+              Funds <a href={bounty.issueUrl} target="_blank" rel="noreferrer" className="underline decoration-brand decoration-2 underline-offset-2">issue #{bounty.issueNumber}: {bounty.issueTitle}</a>.
+              A PR that references #{bounty.issueNumber} is the expected deliverable.
+            </p>
+          )}
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{bounty.description}</p>
         </Card>
 
@@ -214,7 +223,7 @@ function SubmitForm({ bounty, onDone, onError }: { bounty: Detail; onDone: () =>
         </CardTitle>
         {bounty.repoFullName && !useLink ? (
           <Field id="pr" label="Pull request">
-            <PullPicker repoFullName={bounty.repoFullName} value={pr} onChange={setPr} />
+            <PullPicker repoFullName={bounty.repoFullName} issueNumber={bounty.issueNumber} value={pr} onChange={setPr} />
             <button type="button" onClick={() => setUseLink(true)} className="label mt-2 text-muted underline">Use a link instead</button>
           </Field>
         ) : (

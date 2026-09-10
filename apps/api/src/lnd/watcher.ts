@@ -1,6 +1,7 @@
 import type { Ctx } from "../bounties/service.js";
 import { apply } from "../bounties/service.js";
 import { bounties } from "../db/repo.js";
+import { commentOnIssue, issueMessages } from "../github/notify.js";
 import { lnd } from "./client.js";
 
 // Polls LND for every non-terminal bounty and reconciles our status with the
@@ -18,7 +19,8 @@ export async function pollOnce(ctx: Ctx): Promise<void> {
         // LND expired on its own.
         apply(ctx, b, "expired");
       } else if (state === "ACCEPTED" && b.status === "unfunded") {
-        apply(ctx, b, "htlc_accepted", { fundedAt: new Date().toISOString() });
+        const funded = apply(ctx, b, "htlc_accepted", { fundedAt: new Date().toISOString() });
+        void commentOnIssue(ctx.db, funded, issueMessages.funded(funded));
       } else if (pastExpiry && (state === "OPEN" || state === "ACCEPTED")) {
         await lnd.cancelInvoice(b.paymentHash);
         apply(ctx, b, "expired");

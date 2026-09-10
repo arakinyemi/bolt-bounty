@@ -1,5 +1,5 @@
 import type {
-  Bounty, BountyDetail, CreateBountyInput, CreateSubmissionInput, GithubPull, GithubRepo,
+  Bounty, BountyDetail, CreateBountyInput, CreateSubmissionInput, GithubIssue, GithubPull, GithubRepo,
   MeResponse, MySubmission, PublicBounty, PublicUser, StatusChange, Submission, UserRole,
 } from "@boltbounty/shared";
 
@@ -23,6 +23,8 @@ export const api = {
   logout: () => call<{ ok: true }>("POST", "/auth/logout"),
   repos: () => call<GithubRepo[]>("GET", "/github/repos"),
   pulls: (fullName: string) => call<GithubPull[]>("GET", `/github/repos/${fullName}/pulls`),
+  issues: (fullName: string) => call<GithubIssue[]>("GET", `/github/repos/${fullName}/issues`),
+  issue: (fullName: string, number: number) => call<GithubIssue>("GET", `/github/repos/${fullName}/issues/${number}`),
 
   list: () => call<PublicBounty[]>("GET", "/bounties"),
   get: (id: string) => call<BountyDetail>("GET", `/bounties/${id}`),
@@ -34,6 +36,12 @@ export const api = {
   cancel: (id: string) => call<PublicBounty>("POST", `/bounties/${id}/cancel`),
   retryPayout: (id: string) => call<PublicBounty>("POST", `/bounties/${id}/retry-payout`),
 };
+
+// Parses https://github.com/owner/repo/issues/123 into its parts.
+export function parseIssueUrl(url: string): { fullName: string; number: number } | null {
+  const m = url.trim().match(/^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)/);
+  return m ? { fullName: m[1]!, number: Number(m[2]) } : null;
+}
 
 export const signInUrl = (returnTo: string) => `${BASE}/auth/github?returnTo=${encodeURIComponent(returnTo)}`;
 

@@ -6,6 +6,7 @@ import type { Db } from "../db/index.js";
 import { bounties, events, submissions, type BountyRecord, type UserRecord } from "../db/repo.js";
 import type { Hub } from "../events/hub.js";
 import { github, GithubError } from "../github/api.js";
+import { commentOnIssue, issueMessages } from "../github/notify.js";
 import { lnd } from "../lnd/client.js";
 import { newPreimage } from "../lnd/preimage.js";
 import { transition, type BountyEvent } from "./state.js";
@@ -54,6 +55,21 @@ export function apply(ctx: Ctx, b: BountyRecord, event: BountyEvent, patch: Part
 
 export async function createBounty(ctx: Ctx, input: CreateBountyInput, user: UserRecord): Promise<BountyRecord> {
   requireRole(user, "poster");
+
+  // A bounty may fund a specific GitHub issue on the chosen repo.
+  let issue: { number: number; url: string; title: string } | null = null;
+  if (input.issueNumber) {
+    if (!input.repoFullName) throw new HttpError(400, "an issue needs a repository");
+    try {
+      const found = await github.issue(user.accessToken, input.repoFullName, input.issueNumber);
+      issue = { number: found.number, url: found.url, title: found.title };
+    } catch (err) {
+      if (err instanceof GithubError && err.status === 404) throw new HttpError(400, `issue #${input.issueNumber} not found on ${input.repoFullName}`);
+      if (err instanceof GithubError && err.status === 400) throw new HttpError(400, err.message);
+      throw err;
+    }
+  }
+
   const { preimage, hash } = newPreimage();
   const expiresIn = input.expiresInSeconds ?? config.bountyDefaultExpirySeconds;
   const holdInvoice = await lnd.addHoldInvoice({
@@ -70,6 +86,9 @@ export async function createBounty(ctx: Ctx, input: CreateBountyInput, user: Use
     description: input.description,
     repoUrl: input.repoFullName ? `https://github.com/${input.repoFullName}` : (input.repoUrl ?? null),
     repoFullName: input.repoFullName ?? null,
+    issueNumber: issue?.number ?? null,
+    issueUrl: issue?.url ?? null,
+    issueTitle: issue?.title ?? null,
     posterUserId: user.id,
     poster: { login: user.login, avatarUrl: user.avatarUrl },
     amountSats: input.amountSats,
@@ -180,7 +199,9 @@ async function payWorker(ctx: Ctx, b: BountyRecord, s: Submission): Promise<Boun
   try {
     const paid = await lnd.payInvoice(s.payoutInvoice, feeLimitSats);
     submissions.update(ctx.db, s.id, { payoutError: null });
-    return apply(ctx, b, "approved", { payoutPaymentHash: paid.paymentHash });
+    const updated = apply(ctx, b, "approved", { payoutPaymentHash: paid.paymentHash });
+    void commentOnIssue(ctx.db, updated, issueMessages.paid(updated, s.workerName, s.prNumber));
+    return updated;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     submissions.update(ctx.db, s.id, { payoutError: message });
@@ -202,5 +223,7 @@ export async function cancel(ctx: Ctx, id: string): Promise<BountyRecord> {
   const b = mustGet(ctx, id);
   if (b.status !== "funded") throw new HttpError(409, `bounty is ${b.status}, only funded bounties can be cancelled`);
   await lnd.cancelInvoice(b.paymentHash);
-  return apply(ctx, b, "poster_cancelled");
+  const updated = apply(ctx, b, "poster_cancelled");
+  void commentOnIssue(ctx.db, updated, issueMessages.cancelled(updated));
+  return updated;
 }

@@ -1,4 +1,4 @@
-import type { GithubPull, GithubRepo } from "@boltbounty/shared";
+import type { GithubIssue, GithubPull, GithubRepo } from "@boltbounty/shared";
 
 // Thin GitHub REST client. Every call uses the signed-in user's OAuth token, so
 // the platform never needs its own GitHub credentials beyond the OAuth app.
@@ -12,17 +12,25 @@ export class GithubError extends Error {
   }
 }
 
-async function gh<T>(token: string, path: string): Promise<T> {
+async function gh<T>(token: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, {
+    method: body === undefined ? "GET" : "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "boltbounty",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new GithubError(`GitHub ${path} responded ${res.status}`, res.status);
   return (await res.json()) as T;
+}
+
+// Issue numbers referenced like "#12", "closes #12" or "fixes #12".
+export function linkedIssues(text: string): number[] {
+  return [...new Set([...text.matchAll(/(?:^|[^\w/])#(\d+)\b/g)].map((m) => Number(m[1])))];
 }
 
 export interface GithubUser {
@@ -45,10 +53,22 @@ interface RawRepo {
 interface RawPull {
   number: number;
   title: string;
+  body: string | null;
   html_url: string;
   user: { login: string };
   draft: boolean;
   updated_at: string;
+}
+
+interface RawIssue {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  user: { login: string };
+  labels: { name: string }[];
+  updated_at: string;
+  pull_request?: unknown; // present when the "issue" is actually a PR
 }
 
 const toRepo = (r: RawRepo): GithubRepo => ({
@@ -69,6 +89,17 @@ const toPull = (me: string) => (p: RawPull): GithubPull => ({
   draft: p.draft,
   updatedAt: p.updated_at,
   mine: p.user.login === me,
+  linkedIssues: linkedIssues(`${p.title}\n${p.body ?? ""}`),
+});
+
+const toIssue = (i: RawIssue): GithubIssue => ({
+  number: i.number,
+  title: i.title,
+  url: i.html_url,
+  body: (i.body ?? "").trim().slice(0, 600),
+  author: i.user.login,
+  labels: i.labels.map((l) => l.name),
+  updatedAt: i.updated_at,
 });
 
 export const github = {
@@ -86,5 +117,21 @@ export const github = {
 
   pull: async (token: string, fullName: string, number: number, me: string): Promise<GithubPull> => {
     return toPull(me)(await gh<RawPull>(token, `/repos/${fullName}/pulls/${number}`));
+  },
+
+  // The issues endpoint also returns pull requests; those are filtered out.
+  issues: async (token: string, fullName: string): Promise<GithubIssue[]> => {
+    const raw = await gh<RawIssue[]>(token, `/repos/${fullName}/issues?state=open&sort=updated&direction=desc&per_page=50`);
+    return raw.filter((i) => !i.pull_request).map(toIssue);
+  },
+
+  issue: async (token: string, fullName: string, number: number): Promise<GithubIssue> => {
+    const raw = await gh<RawIssue>(token, `/repos/${fullName}/issues/${number}`);
+    if (raw.pull_request) throw new GithubError(`#${number} on ${fullName} is a pull request, not an issue`, 400);
+    return toIssue(raw);
+  },
+
+  comment: async (token: string, fullName: string, issueNumber: number, body: string): Promise<void> => {
+    await gh(token, `/repos/${fullName}/issues/${issueNumber}/comments`, { body });
   },
 };

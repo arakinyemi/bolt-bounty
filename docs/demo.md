@@ -27,15 +27,18 @@ Show Polar. "Three LND nodes on regtest. Poster, our platform, worker. Two
 channels. The poster's balance is X sats."
 
 ### 2. Create a bounty (30 seconds)
-As the poster: **Post a bounty**. Pick the repository, title "Fix broken link
-in README", amount 20000. Create. "The API generated a preimage, kept it, and asked our node for a hold
+As the poster: **Post a bounty**. Pick the repository, then the open issue.
+The title and brief fill in from it. Amount 20000. Create. (Or start from
+GitHub: paste the issue URL into `/new?issue=`.) "The API generated a preimage, kept it, and asked our node for a hold
 invoice locked to its hash. Here is the invoice and the poster secret."
 
 ### 3. Fund it (45 seconds)
 Copy the invoice. In Polar, click **poster**, Actions, **Pay Invoice**, paste,
 pay. Watch the browser flip to **Funded and escrowed** on its own.
 
-Show Polar: poster's payment is pending, platform's balance has not changed.
+Show the GitHub issue: BoltBounty has commented with the amount and a claim
+link. Show Polar: poster's payment is pending, platform's balance has not
+changed.
 Say: "The sats are locked in flight on the poster's channel. Nobody can spend
 them, including us. There is no contract and no custodian, just an HTLC that
 our node has accepted but cannot settle without the preimage."

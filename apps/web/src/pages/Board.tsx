@@ -96,7 +96,10 @@ export function Board() {
           <li key={b.id}>
             <Link to={`/b/${b.id}`} className="card block h-full bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_#1e1e1e]">
               <div className="flex items-start justify-between gap-3">
-                {b.repoFullName ? <Tag>{b.repoFullName}</Tag> : b.repoUrl ? <Tag>{new URL(b.repoUrl).hostname}</Tag> : <Tag>No repo</Tag>}
+                <span className="flex min-w-0 flex-wrap gap-1.5">
+                  {b.repoFullName ? <Tag>{b.repoFullName}</Tag> : b.repoUrl ? <Tag>{new URL(b.repoUrl).hostname}</Tag> : <Tag>No repo</Tag>}
+                  {b.issueNumber && <Tag tone="green">#{b.issueNumber}</Tag>}
+                </span>
                 <StatusPill status={b.status} />
               </div>
               <h3 className="mt-4 font-display text-xl font-bold leading-tight">{b.title}</h3>

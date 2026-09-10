@@ -88,6 +88,22 @@ bounties or submissions, after which it is fixed.
 Pull requests are looked up with the worker's own token, so a submission is
 rejected unless the PR exists on the bounty's repo and is visible to them.
 
+### Issues
+
+A bounty can fund a specific GitHub issue. Posters pick an open issue after
+choosing the repo, and the title and brief prefill from it. Two ways in:
+
+- **From the app**: Post a bounty, pick the repo, pick the issue.
+- **From GitHub**: open `APP_URL/new?issue=https://github.com/owner/repo/issues/123`.
+  Drop that link in the issue itself, a label description, or a README badge
+  and anyone with a poster account lands on the form with the issue selected.
+
+The app comments on the issue, as the poster, when the escrow is funded
+(amount plus a claim link), when it pays out (who was paid, for which PR),
+and when it is cancelled. Comments are best-effort: a GitHub failure is
+logged and never blocks a Lightning operation. Workers see PRs that
+reference the issue number flagged and listed first.
+
 Sessions are httpOnly cookies backed by a `sessions` table. OAuth uses a
 state cookie, and post-login redirects are restricted to same-origin paths.
 The server refuses to start without `GITHUB_CLIENT_ID` and

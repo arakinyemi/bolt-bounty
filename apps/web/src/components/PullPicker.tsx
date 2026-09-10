@@ -5,15 +5,19 @@ import { Spinner, Tag } from "./ui";
 import { ago } from "../format";
 
 // Open pull requests on the bounty's repo; the worker's own come first.
-export function PullPicker({ repoFullName, value, onChange }: { repoFullName: string; value: number | null; onChange: (n: number | null) => void }) {
+export function PullPicker({ repoFullName, issueNumber, value, onChange }: { repoFullName: string; issueNumber: number | null; value: number | null; onChange: (n: number | null) => void }) {
   const [pulls, setPulls] = useState<GithubPull[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.pulls(repoFullName)
-      .then((list) => setPulls([...list].sort((a, b) => Number(b.mine) - Number(a.mine))))
+      // Own PRs first, and among those the ones that reference the issue.
+      .then((list) => setPulls([...list].sort((a, b) => score(b) - score(a))))
       .catch((e: Error) => setError(e.message));
-  }, [repoFullName]);
+  }, [repoFullName, issueNumber]);
+
+  const links = (p: GithubPull) => issueNumber !== null && p.linkedIssues.includes(issueNumber);
+  const score = (p: GithubPull) => (p.mine ? 2 : 0) + (links(p) ? 1 : 0);
 
   return (
     <div className="mt-1.5 max-h-72 overflow-y-auto border-2 border-ink bg-white">
@@ -40,6 +44,7 @@ export function PullPicker({ repoFullName, value, onChange }: { repoFullName: st
                 <span>by {p.author}</span>
                 <span>{ago(p.updatedAt)}</span>
                 {p.mine && <Tag tone="green">yours</Tag>}
+                {links(p) && <Tag tone="yellow">references #{issueNumber}</Tag>}
                 {p.draft && <Tag tone="yellow">draft</Tag>}
               </span>
             </span>
