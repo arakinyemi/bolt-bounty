@@ -10,16 +10,29 @@ export const BOUNTY_STATUSES: readonly BountyStatus[] = [
   "unfunded", "funded", "submitted", "paid", "cancelled", "expired",
 ];
 
+// A GitHub account as shown in the UI.
+export interface PublicUser {
+  id: string;
+  login: string;
+  name: string | null;
+  avatarUrl: string;
+}
+
+export type UserRef = Pick<PublicUser, "login" | "avatarUrl">;
+
 export interface Bounty {
   id: string;
   title: string;
   description: string;
   repoUrl: string | null;
+  repoFullName: string | null;  // owner/name when chosen from the poster's GitHub repos
+  posterUserId: string | null;  // null for bounties posted in guest mode
+  poster: UserRef | null;
   amountSats: number;
   status: BountyStatus;
   paymentHash: string;
   holdInvoice: string;
-  posterSecret: string;        // returned once at creation; acts as poster auth
+  posterSecret: string;        // returned once at creation; API-only fallback for poster auth
   fundedAt: string | null;
   expiresAt: string;
   createdAt: string;
@@ -30,7 +43,11 @@ export interface Submission {
   id: string;
   bountyId: string;
   workerName: string;
+  workerUserId: string | null;
+  worker: UserRef | null;
   workUrl: string;
+  prNumber: number | null;
+  prTitle: string | null;
   notes: string;
   payoutInvoice: string;       // BOLT11 from the worker for amountSats
   createdAt: string;
@@ -51,4 +68,29 @@ export interface StatusChange {
   event: string;
   at: string;
   bounty: PublicBounty;
+}
+
+export interface MeResponse {
+  user: PublicUser | null;
+  githubConfigured: boolean;
+}
+
+export interface GithubRepo {
+  fullName: string;
+  name: string;
+  owner: string;
+  url: string;
+  description: string | null;
+  private: boolean;
+  updatedAt: string;
+}
+
+export interface GithubPull {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  draft: boolean;
+  updatedAt: string;
+  mine: boolean;
 }

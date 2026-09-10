@@ -1,6 +1,8 @@
 import type { Bounty, BountyDetail, PublicBounty, StatusChange, Submission } from "@boltbounty/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createSession } from "../src/auth.js";
 import { openDb } from "../src/db/index.js";
+import { users } from "../src/db/repo.js";
 import { Hub } from "../src/events/hub.js";
 import { lnd } from "../src/lnd/client.js";
 import { pollOnce, startWatcher } from "../src/lnd/watcher.js";
@@ -16,6 +18,9 @@ const ctx = { db: openDb(":memory:"), hub: new Hub() };
 const app = buildApp(ctx);
 let base = "";
 let stopWatcher = () => {};
+// A signed-in worker, seeded directly so the suite needs no GitHub OAuth app.
+const worker_user = users.upsert(ctx.db, { id: "1", login: "ada", name: "Ada", avatarUrl: "https://example.invalid/ada.png", accessToken: "test-token" });
+const workerCookie = { cookie: `bb_session=${createSession(ctx.db, worker_user.id)}` };
 
 beforeAll(async () => {
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -30,7 +35,7 @@ afterAll(async () => {
 });
 
 async function api<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: T }> {
-  const res = await fetch(base + path, {
+  const res = await fetch(base + "/api" + path, {
     method,
     headers: body === undefined ? headers : { "content-type": "application/json", ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -60,7 +65,7 @@ function collectEvents(id: string): { seen: StatusChange[]; stop: () => void } {
   const seen: StatusChange[] = [];
   const controller = new AbortController();
   (async () => {
-    const res = await fetch(`${base}/bounties/${id}/events`, { signal: controller.signal });
+    const res = await fetch(`${base}/api/bounties/${id}/events`, { signal: controller.signal });
     const decoder = new TextDecoder();
     let buffer = "";
     for await (const chunk of res.body!) {
@@ -91,20 +96,18 @@ describe("bounty lifecycle on Polar", () => {
     expect(funded.fundedAt).not.toBeNull();
 
     const wrongAmount = await api<{ error: string }>("POST", `/bounties/${bounty.id}/submissions`, {
-      workerName: "ada",
       workUrl: "https://github.com/example/repo/pull/1",
       notes: "",
       payoutInvoice: await worker.createInvoice(amountSats - 1),
-    });
+    }, workerCookie);
     expect(wrongAmount.status).toBe(400);
     expect(wrongAmount.body.error).toMatch(/19999 sats/);
 
     const submitWork = async () => api<Submission>("POST", `/bounties/${bounty.id}/submissions`, {
-      workerName: "ada",
       workUrl: "https://github.com/example/repo/pull/1",
       notes: "done",
       payoutInvoice: await worker.createInvoice(amountSats),
-    });
+    }, workerCookie);
 
     // A rejected submission returns the bounty to funded with escrow intact.
     const first = await submitWork();
@@ -130,6 +133,8 @@ describe("bounty lifecycle on Polar", () => {
 
     const after = await detail(bounty.id);
     expect(after.submissions.map((s) => s.decision)).toEqual(["rejected", "approved"]);
+    expect(after.submissions[1]?.worker?.login).toBe("ada");
+    expect(after.submissions[1]?.workerName).toBe("ada");
     expect(events.seen.map((e) => e.to)).toEqual(["funded", "submitted", "funded", "submitted", "paid"]);
     events.stop();
   });

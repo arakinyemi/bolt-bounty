@@ -41,13 +41,14 @@ and the poster cannot pull them back until the bounty expires.
    invoice)           │                ▲                            invoice)
                       │                │ REST + macaroon
                       │                │
-               Polar UI          apps/api  (Fastify, TypeScript)
+               Polar UI          apps/api  (Fastify, TypeScript)      GitHub
                                   ├── lnd/       hold invoice, settle, cancel, pay
-                                  ├── bounties/  state machine + service
+                                  ├── bounties/  state machine + service     ▲
+                                  ├── github/    OAuth, repos, pull requests ─┘
                                   ├── watcher    polls invoice state every 3s
-                                  └── SQLite     data/boltbounty.db
+                                  └── SQLite     bounties, submissions, users, sessions
                                        ▲
-                                       │ JSON + server-sent events
+                                       │ JSON + server-sent events, under /api
                                        │
                                   apps/web  (React, Vite, Tailwind)
                                   board · create · bounty detail · how it works
@@ -69,6 +70,21 @@ The poster and worker nodes are driven from Polar during the demo.
 
 Status changes happen in one place, `apps/api/src/bounties/state.ts`.
 
+## GitHub integration
+
+Posters sign in with GitHub and pick one of their repositories. Workers sign
+in and pick one of the repo's open pull requests; the API verifies the pull
+request with the worker's own token before accepting the submission. Poster
+actions (approve, reject, cancel) are tied to the GitHub account that posted.
+
+Sessions are httpOnly cookies backed by a `sessions` table. OAuth uses a
+state cookie, and post-login redirects are restricted to same-origin paths.
+
+Without `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` the app runs in guest
+mode: anyone can post, the poster secret is the only poster auth, and workers
+submit a link plus a name. That keeps the demo runnable if OAuth is ever
+unavailable.
+
 ## Setup
 
 Requirements: Node 20+, pnpm, Docker, [Polar](https://lightningpolar.com).
@@ -83,7 +99,20 @@ Requirements: Node 20+, pnpm, Docker, [Polar](https://lightningpolar.com).
 4. `pnpm lnd:check` should print the platform node's alias and two channels.
 5. `pnpm lnd:hodl-smoke` proves the escrow mechanic: pay the printed invoice
    from poster in Polar, then choose settle or cancel.
-6. `pnpm dev` and open http://localhost:5173.
+6. Optional, for GitHub sign-in: create an OAuth App under GitHub Settings,
+   Developer settings, OAuth Apps. Homepage `http://localhost:5173`, callback
+   `http://localhost:5173/api/auth/github/callback`. Put the client id and
+   secret in `.env`. The app requests `read:user` and `public_repo`, so only
+   public repositories and their pull requests are listed.
+7. `pnpm dev` and open http://localhost:5173.
+
+### Production
+
+`pnpm build` compiles the web app, and `pnpm start` runs the API with
+`NODE_ENV=production`, which also serves `apps/web/dist` from the same process
+and origin. Set `APP_URL` to the public https URL so cookies are marked secure
+and the OAuth callback resolves. The Lightning side stays regtest-only in this
+build; mainnet is a deliberate non-goal.
 
 `pnpm test` runs the unit tests and a live suite that drives the whole
 lifecycle across the Polar network. `pnpm demo:reset` cancels open hold

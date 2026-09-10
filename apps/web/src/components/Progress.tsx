@@ -4,24 +4,24 @@ import type { BountyStatus } from "@boltbounty/shared";
 const STEPS: { key: string; label: string; reached: BountyStatus[] }[] = [
   { key: "created", label: "Created", reached: ["unfunded", "funded", "submitted", "paid", "cancelled", "expired"] },
   { key: "funded", label: "Sats locked", reached: ["funded", "submitted", "paid", "cancelled"] },
-  { key: "submitted", label: "Work submitted", reached: ["submitted", "paid"] },
+  { key: "submitted", label: "Work in", reached: ["submitted", "paid"] },
   { key: "paid", label: "Paid out", reached: ["paid"] },
 ];
 
 export function Progress({ status }: { status: BountyStatus }) {
   const failed = status === "cancelled" || status === "expired";
   return (
-    <ol className="flex items-center gap-2 text-xs">
+    <ol className="flex items-center gap-2">
       {STEPS.map((step, i) => {
         const last = i === STEPS.length - 1;
-        const done = step.reached.includes(status);
+        const done = step.reached.includes(status) || (last && failed);
         const label = last && failed ? (status === "cancelled" ? "Cancelled" : "Expired") : step.label;
-        const tone = last && failed ? "bg-rose-500 text-white" : done ? "bg-amber-500 text-white" : "bg-stone-200 text-stone-500";
+        const box = last && failed ? "bg-brand text-white" : done ? "bg-ink text-white" : "bg-white text-muted";
         return (
           <li key={step.key} className="flex items-center gap-2">
-            <span className={`flex h-5 w-5 items-center justify-center rounded-full font-semibold ${tone}`}>{done || (last && failed) ? "✓" : i + 1}</span>
-            <span className={`hidden sm:inline ${done || (last && failed) ? "font-medium text-stone-800" : "text-stone-500"}`}>{label}</span>
-            {!last && <span className="mx-1 h-px w-6 bg-stone-300" aria-hidden />}
+            <span className={`label flex h-6 w-6 items-center justify-center border-2 border-ink font-semibold ${box}`}>{done ? "✓" : i + 1}</span>
+            <span className={`label hidden whitespace-nowrap sm:inline ${done ? "font-semibold" : "text-muted"}`}>{label}</span>
+            {!last && <span className="mx-1 h-0.5 w-5 bg-ink/30" aria-hidden />}
           </li>
         );
       })}

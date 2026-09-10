@@ -8,10 +8,13 @@
     "test": "vitest run",
     "lnd:hodl-smoke": "node --env-file=../../.env --import tsx src/scripts/hodl-smoke.ts",
     "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
-    "demo:reset": "node --env-file=../../.env --import tsx src/scripts/reset-demo.ts"
+    "demo:reset": "node --env-file=../../.env --import tsx src/scripts/reset-demo.ts",
+    "start": "NODE_ENV=production node --env-file=../../.env --import tsx src/server.ts"
   },
   "dependencies": {
     "@boltbounty/shared": "workspace:*",
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/static": "^8.2.0",
     "better-sqlite3": "^12.2.0",
     "fastify": "^5.4.0",
     "undici": "^7.10.0",

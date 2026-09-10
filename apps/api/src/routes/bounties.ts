@@ -1,6 +1,7 @@
 import { createBountySchema, createSubmissionSchema, decisionSchema } from "@boltbounty/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodType } from "zod";
+import { currentUser } from "../auth.js";
 import * as svc from "../bounties/service.js";
 import type { Ctx } from "../bounties/service.js";
 
@@ -21,9 +22,16 @@ function posterSecret(req: FastifyRequest): string | undefined {
 }
 
 export function registerBountyRoutes(app: FastifyInstance, ctx: Ctx): void {
+  // Loads the bounty and checks the caller is its poster.
+  const asPoster = (req: FastifyRequest<IdParams>) => {
+    const b = svc.mustGet(ctx, req.params.id);
+    svc.requirePoster(b, currentUser(ctx.db, req), posterSecret(req));
+    return b;
+  };
+
   app.post("/bounties", async (req, reply) => {
     const input = parse(createBountySchema, req.body);
-    const b = await svc.createBounty(ctx, input);
+    const b = await svc.createBounty(ctx, input, currentUser(ctx.db, req));
     // The only response that ever contains the poster secret.
     const { preimage: _p, ...withSecret } = b;
     return reply.code(201).send(withSecret);
@@ -35,35 +43,25 @@ export function registerBountyRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   app.post<IdParams>("/bounties/:id/submissions", async (req, reply) => {
     const input = parse(createSubmissionSchema, req.body);
-    const s = await svc.submitWork(ctx, req.params.id, input);
+    const s = await svc.submitWork(ctx, req.params.id, input, currentUser(ctx.db, req));
     return reply.code(201).send(s);
   });
 
   app.post<IdParams>("/bounties/:id/approve", async (req) => {
-    const b = svc.mustGet(ctx, req.params.id);
-    svc.requirePoster(b, posterSecret(req));
+    const b = asPoster(req);
     const { submissionId } = parse(decisionSchema, req.body);
     return svc.toPublic(await svc.approve(ctx, b.id, submissionId));
   });
 
   app.post<IdParams>("/bounties/:id/reject", async (req) => {
-    const b = svc.mustGet(ctx, req.params.id);
-    svc.requirePoster(b, posterSecret(req));
+    const b = asPoster(req);
     const { submissionId } = parse(decisionSchema, req.body);
     return svc.toPublic(svc.reject(ctx, b.id, submissionId));
   });
 
-  app.post<IdParams>("/bounties/:id/cancel", async (req) => {
-    const b = svc.mustGet(ctx, req.params.id);
-    svc.requirePoster(b, posterSecret(req));
-    return svc.toPublic(await svc.cancel(ctx, b.id));
-  });
+  app.post<IdParams>("/bounties/:id/cancel", async (req) => svc.toPublic(await svc.cancel(ctx, asPoster(req).id)));
 
-  app.post<IdParams>("/bounties/:id/retry-payout", async (req) => {
-    const b = svc.mustGet(ctx, req.params.id);
-    svc.requirePoster(b, posterSecret(req));
-    return svc.toPublic(await svc.retryPayout(ctx, b.id));
-  });
+  app.post<IdParams>("/bounties/:id/retry-payout", async (req) => svc.toPublic(await svc.retryPayout(ctx, asPoster(req).id)));
 
   // Server-sent events. /events streams every bounty (for the board);
   // /bounties/:id/events streams one.

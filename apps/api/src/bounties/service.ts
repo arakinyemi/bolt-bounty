@@ -2,8 +2,9 @@ import type { BountyDetail, CreateBountyInput, CreateSubmissionInput, PublicBoun
 import { randomBytes, randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import type { Db } from "../db/index.js";
-import { bounties, events, submissions, type BountyRecord } from "../db/repo.js";
+import { bounties, events, submissions, type BountyRecord, type UserRecord } from "../db/repo.js";
 import type { Hub } from "../events/hub.js";
+import { github, GithubError } from "../github/api.js";
 import { lnd } from "../lnd/client.js";
 import { newPreimage } from "../lnd/preimage.js";
 import { transition, type BountyEvent } from "./state.js";
@@ -34,8 +35,12 @@ export function mustGet(ctx: Ctx, id: string): BountyRecord {
   return b;
 }
 
-export function requirePoster(b: BountyRecord, secret: string | undefined): void {
-  if (!secret || secret !== b.posterSecret) throw new HttpError(403, "invalid poster secret");
+// The poster is the signed-in GitHub account that created the bounty. The
+// poster secret is the API-only fallback (tests, guest mode, scripts).
+export function requirePoster(b: BountyRecord, user: UserRecord | null, secret: string | undefined): void {
+  if (user && b.posterUserId === user.id) return;
+  if (secret && secret === b.posterSecret) return;
+  throw new HttpError(403, "only the poster can do that");
 }
 
 // Applies a state-machine event, persists it, and notifies SSE subscribers.
@@ -49,7 +54,8 @@ export function apply(ctx: Ctx, b: BountyRecord, event: BountyEvent, patch: Part
   return updated;
 }
 
-export async function createBounty(ctx: Ctx, input: CreateBountyInput): Promise<BountyRecord> {
+export async function createBounty(ctx: Ctx, input: CreateBountyInput, user: UserRecord | null): Promise<BountyRecord> {
+  if (!user && config.github) throw new HttpError(401, "sign in with GitHub to post a bounty");
   const { preimage, hash } = newPreimage();
   const expiresIn = input.expiresInSeconds ?? config.bountyDefaultExpirySeconds;
   const holdInvoice = await lnd.addHoldInvoice({
@@ -64,7 +70,10 @@ export async function createBounty(ctx: Ctx, input: CreateBountyInput): Promise<
     id: randomUUID(),
     title: input.title,
     description: input.description,
-    repoUrl: input.repoUrl ?? null,
+    repoUrl: input.repoFullName ? `https://github.com/${input.repoFullName}` : (input.repoUrl ?? null),
+    repoFullName: input.repoFullName ?? null,
+    posterUserId: user?.id ?? null,
+    poster: user ? { login: user.login, avatarUrl: user.avatarUrl } : null,
     amountSats: input.amountSats,
     status: "unfunded",
     paymentHash: hash,
@@ -89,9 +98,31 @@ export function getDetail(ctx: Ctx, id: string): BountyDetail {
   return { ...toPublic(mustGet(ctx, id)), submissions: submissions.forBounty(ctx.db, id) };
 }
 
-export async function submitWork(ctx: Ctx, id: string, input: CreateSubmissionInput): Promise<Submission> {
+export async function submitWork(ctx: Ctx, id: string, input: CreateSubmissionInput, user: UserRecord | null): Promise<Submission> {
   const b = mustGet(ctx, id);
   if (b.status !== "funded") throw new HttpError(409, `bounty is ${b.status}, submissions need it funded`);
+  if (!user && config.github) throw new HttpError(401, "sign in with GitHub to submit work");
+
+  // A pull request is looked up with the worker's own token so it must exist
+  // on the bounty's repo and be visible to them.
+  let workUrl = input.workUrl ?? null;
+  let prTitle: string | null = null;
+  if (input.prNumber !== undefined) {
+    if (!b.repoFullName) throw new HttpError(400, "this bounty has no GitHub repo, give a link instead");
+    if (!user) throw new HttpError(401, "sign in with GitHub to submit a pull request");
+    try {
+      const pr = await github.pull(user.accessToken, b.repoFullName, input.prNumber, user.login);
+      workUrl = pr.url;
+      prTitle = pr.title;
+    } catch (err) {
+      if (err instanceof GithubError && err.status === 404) throw new HttpError(400, `pull request #${input.prNumber} not found on ${b.repoFullName}`);
+      throw err;
+    }
+  }
+  if (!workUrl) throw new HttpError(400, "a link to the work or a pull request is required");
+  const workerName = user?.login ?? input.workerName;
+  if (!workerName) throw new HttpError(400, "workerName is required");
+
   const decoded = await lnd.decodeInvoice(input.payoutInvoice);
   if (decoded.amountSats !== b.amountSats) {
     throw new HttpError(400, `payout invoice is for ${decoded.amountSats} sats, bounty pays ${b.amountSats}`);
@@ -102,8 +133,12 @@ export async function submitWork(ctx: Ctx, id: string, input: CreateSubmissionIn
   const sub: Submission = {
     id: randomUUID(),
     bountyId: b.id,
-    workerName: input.workerName,
-    workUrl: input.workUrl,
+    workerName,
+    workerUserId: user?.id ?? null,
+    worker: user ? { login: user.login, avatarUrl: user.avatarUrl } : null,
+    workUrl,
+    prNumber: input.prNumber ?? null,
+    prTitle,
     notes: input.notes,
     payoutInvoice: input.payoutInvoice,
     createdAt: new Date().toISOString(),

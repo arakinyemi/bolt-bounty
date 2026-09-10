@@ -10,7 +10,9 @@
     "test": "pnpm --filter @boltbounty/api test",
     "lnd:check": "pnpm --filter @boltbounty/api lnd:check",
     "lnd:hodl-smoke": "pnpm --filter @boltbounty/api lnd:hodl-smoke",
-    "demo:reset": "pnpm --filter @boltbounty/api demo:reset"
+    "demo:reset": "pnpm --filter @boltbounty/api demo:reset",
+    "build": "pnpm --filter @boltbounty/web build",
+    "start": "pnpm --filter @boltbounty/api start"
   },
   "devDependencies": {
     "typescript": "^5.6.0"
