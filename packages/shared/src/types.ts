@@ -10,12 +10,18 @@ export const BOUNTY_STATUSES: readonly BountyStatus[] = [
   "unfunded", "funded", "submitted", "paid", "cancelled", "expired",
 ];
 
+// Every account acts as one of two roles. Posters fund bounties and decide
+// on submissions; workers claim bounties and get paid. Switchable in the UI.
+export type UserRole = "poster" | "worker";
+export const USER_ROLES: readonly UserRole[] = ["poster", "worker"];
+
 // A GitHub account as shown in the UI.
 export interface PublicUser {
   id: string;
   login: string;
   name: string | null;
   avatarUrl: string;
+  role: UserRole | null;   // null until the user picks one
 }
 
 export type UserRef = Pick<PublicUser, "login" | "avatarUrl">;
@@ -26,13 +32,12 @@ export interface Bounty {
   description: string;
   repoUrl: string | null;
   repoFullName: string | null;  // owner/name when chosen from the poster's GitHub repos
-  posterUserId: string | null;  // null for bounties posted in guest mode
-  poster: UserRef | null;
+  posterUserId: string;
+  poster: UserRef;
   amountSats: number;
   status: BountyStatus;
   paymentHash: string;
   holdInvoice: string;
-  posterSecret: string;        // returned once at creation; API-only fallback for poster auth
   fundedAt: string | null;
   expiresAt: string;
   createdAt: string;
@@ -42,9 +47,9 @@ export interface Bounty {
 export interface Submission {
   id: string;
   bountyId: string;
-  workerName: string;
-  workerUserId: string | null;
-  worker: UserRef | null;
+  workerName: string;          // GitHub login at submission time
+  workerUserId: string;
+  worker: UserRef;
   workUrl: string;
   prNumber: number | null;
   prTitle: string | null;
@@ -56,8 +61,7 @@ export interface Submission {
   payoutError: string | null;  // set when the hold invoice settled but paying the worker failed
 }
 
-// What the API returns. The poster secret is only ever returned at creation.
-export type PublicBounty = Omit<Bounty, "posterSecret">;
+export type PublicBounty = Bounty;
 export type BountyDetail = PublicBounty & { submissions: Submission[] };
 
 // Server-sent event emitted on every status transition.
@@ -68,6 +72,13 @@ export interface StatusChange {
   event: string;
   at: string;
   bounty: PublicBounty;
+}
+
+// A worker's own submission with the bounty it belongs to.
+export interface MySubmission extends Submission {
+  bountyTitle: string;
+  bountyStatus: BountyStatus;
+  bountyAmountSats: number;
 }
 
 export interface MeResponse {

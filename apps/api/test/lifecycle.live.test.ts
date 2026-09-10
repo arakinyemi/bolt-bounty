@@ -18,9 +18,14 @@ const ctx = { db: openDb(":memory:"), hub: new Hub() };
 const app = buildApp(ctx);
 let base = "";
 let stopWatcher = () => {};
-// A signed-in worker, seeded directly so the suite needs no GitHub OAuth app.
-const worker_user = users.upsert(ctx.db, { id: "1", login: "ada", name: "Ada", avatarUrl: "https://example.invalid/ada.png", accessToken: "test-token" });
-const workerCookie = { cookie: `bb_session=${createSession(ctx.db, worker_user.id)}` };
+// Two signed-in accounts, seeded directly so the suite needs no GitHub OAuth app.
+function seed(id: string, login: string, role: "poster" | "worker") {
+  const u = users.upsert(ctx.db, { id, login, name: login, avatarUrl: `https://example.invalid/${login}.png`, accessToken: "test-token" });
+  users.setRole(ctx.db, u.id, role);
+  return { cookie: `bb_session=${createSession(ctx.db, u.id)}` };
+}
+const posterCookie = seed("1", "grace", "poster");
+const workerCookie = seed("2", "ada", "worker");
 
 beforeAll(async () => {
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -51,10 +56,10 @@ async function createBounty(amountSats: number): Promise<Bounty> {
     description: "The docs link 404s.",
     repoUrl: "https://github.com/example/repo",
     amountSats,
-  });
+  }, posterCookie);
   expect(res.status).toBe(201);
   expect(res.body.status).toBe("unfunded");
-  expect(res.body.posterSecret).toMatch(/^[0-9a-f]{32}$/);
+  expect(res.body.poster.login).toBe("grace");
   expect(res.body.holdInvoice).toMatch(/^lnbcrt/);
   expect(res.body).not.toHaveProperty("preimage");
   return res.body;
@@ -88,7 +93,10 @@ describe("bounty lifecycle on Polar", () => {
 
     const list = await api<PublicBounty[]>("GET", "/bounties");
     expect(list.body[0]?.id).toBe(bounty.id);
-    expect(list.body[0]).not.toHaveProperty("posterSecret");
+
+    // Roles are enforced: workers cannot post, posters cannot submit.
+    const workerPosting = await api<{ error: string }>("POST", "/bounties", { title: "nope", description: "x", amountSats: 500 }, workerCookie);
+    expect(workerPosting.status).toBe(403);
 
     const payment = poster.pay(bounty.holdInvoice);
     await payment.inFlight;
@@ -113,17 +121,19 @@ describe("bounty lifecycle on Polar", () => {
     const first = await submitWork();
     expect(first.status).toBe(201);
     expect((await detail(bounty.id)).status).toBe("submitted");
-    const rejected = await api<PublicBounty>("POST", `/bounties/${bounty.id}/reject`, { submissionId: first.body.id }, { "x-poster-secret": bounty.posterSecret });
+    const rejected = await api<PublicBounty>("POST", `/bounties/${bounty.id}/reject`, { submissionId: first.body.id }, posterCookie);
     expect(rejected.body.status).toBe("funded");
     expect((await lnd.lookupInvoice(bounty.paymentHash)).state).toBe("ACCEPTED");
 
     const submitted = await submitWork();
     expect(submitted.status).toBe(201);
 
-    const noSecret = await api("POST", `/bounties/${bounty.id}/approve`, { submissionId: submitted.body.id });
-    expect(noSecret.status).toBe(403);
+    const signedOut = await api("POST", `/bounties/${bounty.id}/approve`, { submissionId: submitted.body.id });
+    expect(signedOut.status).toBe(401);
+    const notThePoster = await api("POST", `/bounties/${bounty.id}/approve`, { submissionId: submitted.body.id }, workerCookie);
+    expect(notThePoster.status).toBe(403);
 
-    const approved = await api<PublicBounty>("POST", `/bounties/${bounty.id}/approve`, { submissionId: submitted.body.id }, { "x-poster-secret": bounty.posterSecret });
+    const approved = await api<PublicBounty>("POST", `/bounties/${bounty.id}/approve`, { submissionId: submitted.body.id }, posterCookie);
     expect(approved.status).toBe(200);
     expect(approved.body.status).toBe("paid");
     expect(approved.body.payoutPaymentHash).toMatch(/^[0-9a-f]{64}$/);
@@ -143,7 +153,7 @@ describe("bounty lifecycle on Polar", () => {
     const posterBefore = await poster.channelLocalSats();
     const bounty = await createBounty(5_000);
 
-    const tooEarly = await api<{ error: string }>("POST", `/bounties/${bounty.id}/cancel`, undefined, { "x-poster-secret": bounty.posterSecret });
+    const tooEarly = await api<{ error: string }>("POST", `/bounties/${bounty.id}/cancel`, undefined, posterCookie);
     expect(tooEarly.status).toBe(409);
 
     const payment = poster.pay(bounty.holdInvoice);
@@ -151,14 +161,17 @@ describe("bounty lifecycle on Polar", () => {
     await waitFor("funded", () => detail(bounty.id), (b) => b.status === "funded");
     expect(await poster.channelLocalSats()).toBeLessThan(posterBefore);
 
-    const cancelled = await api<PublicBounty>("POST", `/bounties/${bounty.id}/cancel`, undefined, { "x-poster-secret": bounty.posterSecret });
+    const posterClaiming = await api<{ error: string }>("POST", `/bounties/${bounty.id}/submissions`, { workUrl: "https://github.com/example/repo/pull/9", payoutInvoice: "lnbcrt1notreallyaninvoicebutlongenough" }, posterCookie);
+    expect(posterClaiming.status).toBe(403);
+
+    const cancelled = await api<PublicBounty>("POST", `/bounties/${bounty.id}/cancel`, undefined, posterCookie);
     expect(cancelled.status).toBe(200);
     expect(cancelled.body.status).toBe("cancelled");
 
     expect(await payment.final).toBe("FAILED");
     await waitFor("poster balance", () => poster.channelLocalSats(), (v) => v === posterBefore);
 
-    const again = await api("POST", `/bounties/${bounty.id}/cancel`, undefined, { "x-poster-secret": bounty.posterSecret });
+    const again = await api("POST", `/bounties/${bounty.id}/cancel`, undefined, posterCookie);
     expect(again.status).toBe(409);
   });
 

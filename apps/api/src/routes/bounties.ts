@@ -1,7 +1,7 @@
 import { createBountySchema, createSubmissionSchema, decisionSchema } from "@boltbounty/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodType } from "zod";
-import { currentUser } from "../auth.js";
+import { requireUser } from "../auth.js";
 import * as svc from "../bounties/service.js";
 import type { Ctx } from "../bounties/service.js";
 
@@ -16,25 +16,18 @@ function parse<T>(schema: ZodType<T>, body: unknown): T {
   return result.data;
 }
 
-function posterSecret(req: FastifyRequest): string | undefined {
-  const h = req.headers["x-poster-secret"];
-  return Array.isArray(h) ? h[0] : h;
-}
-
 export function registerBountyRoutes(app: FastifyInstance, ctx: Ctx): void {
   // Loads the bounty and checks the caller is its poster.
   const asPoster = (req: FastifyRequest<IdParams>) => {
     const b = svc.mustGet(ctx, req.params.id);
-    svc.requirePoster(b, currentUser(ctx.db, req), posterSecret(req));
+    svc.requirePoster(b, requireUser(ctx.db, req));
     return b;
   };
 
   app.post("/bounties", async (req, reply) => {
     const input = parse(createBountySchema, req.body);
-    const b = await svc.createBounty(ctx, input, currentUser(ctx.db, req));
-    // The only response that ever contains the poster secret.
-    const { preimage: _p, ...withSecret } = b;
-    return reply.code(201).send(withSecret);
+    const b = await svc.createBounty(ctx, input, requireUser(ctx.db, req));
+    return reply.code(201).send(svc.toPublic(b));
   });
 
   app.get("/bounties", async () => svc.listBounties(ctx));
@@ -43,7 +36,7 @@ export function registerBountyRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   app.post<IdParams>("/bounties/:id/submissions", async (req, reply) => {
     const input = parse(createSubmissionSchema, req.body);
-    const s = await svc.submitWork(ctx, req.params.id, input, currentUser(ctx.db, req));
+    const s = await svc.submitWork(ctx, req.params.id, input, requireUser(ctx.db, req));
     return reply.code(201).send(s);
   });
 

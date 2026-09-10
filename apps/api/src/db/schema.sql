@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   login        TEXT NOT NULL,
   name         TEXT,
   avatar_url   TEXT NOT NULL,
+  role         TEXT CHECK (role IN ('poster','worker')),
   -- GitHub OAuth token used to list the user's repos and pull requests.
   -- Production would encrypt this column at rest.
   access_token TEXT NOT NULL,
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS bounties (
   description         TEXT NOT NULL,
   repo_url            TEXT,
   repo_full_name      TEXT,                 -- owner/name on GitHub, when picked from the poster's repos
-  poster_user_id      TEXT REFERENCES users(id),
+  poster_user_id      TEXT NOT NULL REFERENCES users(id),
   amount_sats         INTEGER NOT NULL CHECK (amount_sats > 0),
   status              TEXT NOT NULL CHECK (status IN ('unfunded','funded','submitted','paid','cancelled','expired')),
   payment_hash        TEXT NOT NULL UNIQUE,
@@ -31,7 +32,6 @@ CREATE TABLE IF NOT EXISTS bounties (
   -- MVP only. Revealing the preimage releases the escrow, so production would
   -- keep it in a KMS or HSM rather than next to the bounty row.
   preimage            TEXT NOT NULL,
-  poster_secret       TEXT NOT NULL,
   funded_at           TEXT,
   expires_at          TEXT NOT NULL,
   created_at          TEXT NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   id             TEXT PRIMARY KEY,
   bounty_id      TEXT NOT NULL REFERENCES bounties(id),
   worker_name    TEXT NOT NULL,
-  worker_user_id TEXT REFERENCES users(id),
+  worker_user_id TEXT NOT NULL REFERENCES users(id),
   work_url       TEXT NOT NULL,
   pr_number      INTEGER,
   pr_title       TEXT,

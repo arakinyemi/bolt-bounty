@@ -1,4 +1,4 @@
-import type { Bounty, BountyStatus, Submission } from "@boltbounty/shared";
+import type { Bounty, BountyStatus, MySubmission, Submission, UserRole } from "@boltbounty/shared";
 import type { Db } from "./index.js";
 
 // Thin query layer. Rows are snake_case in SQLite and camelCase in code; the
@@ -13,6 +13,7 @@ export interface UserRecord {
   login: string;
   name: string | null;
   avatarUrl: string;
+  role: UserRole | null;
   accessToken: string; // never leaves the API
   createdAt: string;
   updatedAt: string;
@@ -47,18 +48,18 @@ function update(db: Db, table: string, id: string, patch: object): void {
 
 // Bounties and submissions carry a small joined view of their GitHub user.
 const BOUNTY_SELECT = `SELECT b.*, u.login AS poster_login, u.avatar_url AS poster_avatar_url
-  FROM bounties b LEFT JOIN users u ON u.id = b.poster_user_id`;
+  FROM bounties b JOIN users u ON u.id = b.poster_user_id`;
 const SUBMISSION_SELECT = `SELECT s.*, u.login AS worker_login, u.avatar_url AS worker_avatar_url
-  FROM submissions s LEFT JOIN users u ON u.id = s.worker_user_id`;
+  FROM submissions s JOIN users u ON u.id = s.worker_user_id`;
 
 function toBounty(row: unknown): BountyRecord {
-  const { posterLogin, posterAvatarUrl, ...rest } = fromRow<BountyRecord & { posterLogin: string | null; posterAvatarUrl: string | null }>(row);
-  return { ...rest, poster: posterLogin && posterAvatarUrl ? { login: posterLogin, avatarUrl: posterAvatarUrl } : null };
+  const { posterLogin, posterAvatarUrl, ...rest } = fromRow<BountyRecord & { posterLogin: string; posterAvatarUrl: string }>(row);
+  return { ...rest, poster: { login: posterLogin, avatarUrl: posterAvatarUrl } };
 }
 
 function toSubmission(row: unknown): Submission {
-  const { workerLogin, workerAvatarUrl, ...rest } = fromRow<Submission & { workerLogin: string | null; workerAvatarUrl: string | null }>(row);
-  return { ...rest, worker: workerLogin && workerAvatarUrl ? { login: workerLogin, avatarUrl: workerAvatarUrl } : null };
+  const { workerLogin, workerAvatarUrl, ...rest } = fromRow<Submission & { workerLogin: string; workerAvatarUrl: string }>(row);
+  return { ...rest, worker: { login: workerLogin, avatarUrl: workerAvatarUrl } };
 }
 
 export const bounties = {
@@ -88,6 +89,11 @@ export const submissions = {
   },
   forBounty: (db: Db, bountyId: string): Submission[] =>
     db.prepare(`${SUBMISSION_SELECT} WHERE s.bounty_id = ? ORDER BY s.created_at ASC`).all(bountyId).map(toSubmission),
+  forWorker: (db: Db, workerUserId: string): MySubmission[] =>
+    db.prepare(`SELECT s.*, u.login AS worker_login, u.avatar_url AS worker_avatar_url,
+        b.title AS bounty_title, b.status AS bounty_status, b.amount_sats AS bounty_amount_sats
+      FROM submissions s JOIN users u ON u.id = s.worker_user_id JOIN bounties b ON b.id = s.bounty_id
+      WHERE s.worker_user_id = ? ORDER BY s.created_at DESC`).all(workerUserId).map((r) => toSubmission(r) as MySubmission),
   update: (db: Db, id: string, patch: Partial<Pick<Submission, "decidedAt" | "decision" | "payoutError">>) =>
     update(db, "submissions", id, patch),
 };
@@ -102,13 +108,22 @@ export const users = {
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
     return row ? fromRow<UserRecord>(row) : undefined;
   },
-  upsert: (db: Db, u: Omit<UserRecord, "createdAt" | "updatedAt">): UserRecord => {
+  // Role is kept across sign-ins; everything else refreshes from GitHub.
+  upsert: (db: Db, u: Omit<UserRecord, "createdAt" | "updatedAt" | "role">): UserRecord => {
     const now = new Date().toISOString();
     db.prepare(`INSERT INTO users (id, login, name, avatar_url, access_token, created_at, updated_at)
       VALUES (@id, @login, @name, @avatarUrl, @accessToken, @now, @now)
       ON CONFLICT(id) DO UPDATE SET login = excluded.login, name = excluded.name,
         avatar_url = excluded.avatar_url, access_token = excluded.access_token, updated_at = excluded.updated_at`).run({ ...u, now });
     return users.get(db, u.id)!;
+  },
+  setRole: (db: Db, id: string, role: UserRole) =>
+    db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(role, new Date().toISOString(), id),
+  // True once the account has posted or submitted anything; roles lock then.
+  hasActivity: (db: Db, id: string): boolean => {
+    const row = db.prepare(`SELECT (SELECT COUNT(*) FROM bounties WHERE poster_user_id = ?) +
+      (SELECT COUNT(*) FROM submissions WHERE worker_user_id = ?) AS n`).get(id, id) as { n: number };
+    return row.n > 0;
   },
 };
 

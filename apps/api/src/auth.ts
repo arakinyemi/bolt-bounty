@@ -50,5 +50,9 @@ export function requireUser(db: Db, req: FastifyRequest): UserRecord {
 }
 
 export function toPublicUser(u: UserRecord): PublicUser {
-  return { id: u.id, login: u.login, name: u.name, avatarUrl: u.avatarUrl };
+  return { id: u.id, login: u.login, name: u.name, avatarUrl: u.avatarUrl, role: u.role };
+}
+
+export function requireRole(user: UserRecord, role: "poster" | "worker"): void {
+  if (user.role !== role) throw new HttpError(403, `only ${role}s can do that`);
 }

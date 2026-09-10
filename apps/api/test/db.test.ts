@@ -7,9 +7,10 @@ describe("schema", () => {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as { name: string }[];
     expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["bounties", "submissions", "events"]));
 
+    db.prepare(`INSERT INTO users (id, login, avatar_url, access_token, created_at, updated_at) VALUES ('u1', 'grace', 'x', 't', 'now', 'now')`).run();
     const insert = db.prepare(`INSERT INTO bounties
-      (id, title, description, amount_sats, status, payment_hash, hold_invoice, preimage, poster_secret, expires_at, created_at)
-      VALUES (@id, 't', 'd', 1000, @status, @hash, 'lnbcrt1...', 'pre', 'sec', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`);
+      (id, title, description, poster_user_id, amount_sats, status, payment_hash, hold_invoice, preimage, expires_at, created_at)
+      VALUES (@id, 't', 'd', 'u1', 1000, @status, @hash, 'lnbcrt1...', 'pre', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`);
     expect(() => insert.run({ id: "b1", status: "unfunded", hash: "h1" })).not.toThrow();
     expect(() => insert.run({ id: "b2", status: "bogus", hash: "h2" })).toThrow(/CHECK/);
     expect(() => insert.run({ id: "b3", status: "unfunded", hash: "h1" })).toThrow(/UNIQUE/);

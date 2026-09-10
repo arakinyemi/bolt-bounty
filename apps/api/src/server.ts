@@ -61,7 +61,10 @@ export function buildApp(ctx: Ctx, opts: { serveWeb?: boolean } = {}): FastifyIn
 if (process.argv[1]?.endsWith("server.ts")) {
   const info = await lnd.getInfo(); // fail loudly if the platform node is down
   console.log(`[api] platform node ${info.alias} (${info.identity_pubkey.slice(0, 16)}…) on ${info.chains[0]?.network}`);
-  console.log(`[api] github sign-in ${config.github ? "configured" : "not configured, running in guest mode"}`);
+  if (!config.github) {
+    console.error("[api] GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required. See README, GitHub integration.");
+    process.exit(1);
+  }
 
   const serveWeb = process.env.NODE_ENV === "production" && fs.existsSync(path.join(WEB_DIST, "index.html"));
   const ctx: Ctx = { db: openDb(config.databasePath), hub: new Hub() };

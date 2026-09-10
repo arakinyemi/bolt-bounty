@@ -2,7 +2,7 @@ import type { Bounty, BountyStatus, GithubRepo } from "@boltbounty/shared";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, secrets, signInUrl, subscribe } from "../api";
+import { api, signInUrl, subscribe } from "../api";
 import { useAuth } from "../auth";
 import { CopyButton, Hash } from "../components/Copy";
 import { Progress } from "../components/Progress";
@@ -14,7 +14,7 @@ import { sats } from "../format";
 const QUICK_AMOUNTS = [5_000, 20_000, 50_000];
 
 export function Create() {
-  const { me, githubConfigured, loading } = useAuth();
+  const { me, role, loading } = useAuth();
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [status, setStatus] = useState<BountyStatus>("unfunded");
   const [repo, setRepo] = useState<GithubRepo | null>(null);
@@ -32,10 +32,9 @@ export function Create() {
         title: String(f.get("title")),
         description: String(f.get("description")),
         repoFullName: repo?.fullName ?? null,
-        repoUrl: repo ? null : String(f.get("repoUrl") ?? "") || null,
+        repoUrl: null,
         amountSats: amount,
       });
-      secrets.set(b.id, b.posterSecret);
       setBounty(b);
     } catch (err) {
       setError((err as Error).message);
@@ -50,18 +49,34 @@ export function Create() {
     return subscribe(`/bounties/${bounty.id}/events`, (c) => setStatus(c.to));
   }, [bounty]);
 
-  if (bounty) return <Funding bounty={bounty} status={status} guest={!me} />;
+  if (bounty) return <Funding bounty={bounty} status={status} />;
 
   if (loading) return <p className="text-sm text-muted">Loading…</p>;
 
-  if (githubConfigured && !me) {
+  if (!me) {
     return (
       <div className="mx-auto max-w-xl">
         <Card tone="yellow">
-          <CardTitle tag={<Tag tone="ink">Step 1</Tag>} hint="Your GitHub account is the poster identity. You pick one of your repositories, and only you can approve or cancel the bounty.">
+          <CardTitle tag={<Tag tone="ink">Posters</Tag>} hint="Your GitHub account is the poster identity. You pick one of your repositories, and only you can approve or cancel the bounty.">
             Sign in to post a bounty
           </CardTitle>
           <a href={signInUrl("/new")}><Button>Sign in with GitHub</Button></a>
+        </Card>
+      </div>
+    );
+  }
+
+  if (role !== "poster") {
+    return (
+      <div className="mx-auto max-w-xl">
+        <Card tone="blue">
+          <CardTitle tag={<Tag tone="ink">Workers</Tag>} hint="This account is a worker account. Workers claim bounties; only poster accounts can fund them.">
+            Posting is for poster accounts
+          </CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/"><Button>Find work instead</Button></Link>
+            <Link to="/role"><Button variant="secondary">Review my role</Button></Link>
+          </div>
         </Card>
       </div>
     );
@@ -76,15 +91,9 @@ export function Create() {
       </div>
 
       <Card className="space-y-5">
-        {me ? (
-          <Field id="repo" label="Repository" hint="Workers will submit a pull request against this repo.">
-            <RepoPicker value={repo} onChange={setRepo} />
-          </Field>
-        ) : (
-          <Field id="repoUrl" label="Repository URL" hint="Optional. Guest mode: GitHub sign-in is not configured on this server.">
-            <Input id="repoUrl" name="repoUrl" type="url" placeholder="https://github.com/you/repo" />
-          </Field>
-        )}
+        <Field id="repo" label="Repository" hint="Workers will submit a pull request against this repo.">
+          <RepoPicker value={repo} onChange={setRepo} />
+        </Field>
         <Field id="title" label="Title">
           <Input id="title" name="title" required minLength={3} maxLength={120} placeholder="Fix broken link in README" />
         </Field>
@@ -118,7 +127,7 @@ export function Create() {
   );
 }
 
-function Funding({ bounty, status, guest }: { bounty: Bounty; status: BountyStatus; guest: boolean }) {
+function Funding({ bounty, status }: { bounty: Bounty; status: BountyStatus }) {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
@@ -156,18 +165,6 @@ function Funding({ bounty, status, guest }: { bounty: Bounty; status: BountyStat
           </CardTitle>
           <Hash label="Payment hash" value={bounty.paymentHash} />
           <Link to={`/b/${bounty.id}`} className="mt-5 inline-block"><Button>Open the bounty</Button></Link>
-        </Card>
-      )}
-
-      {guest && (
-        <Card tone="yellow">
-          <CardTitle hint="Guest mode: this secret is your only way to approve, reject, or cancel. This browser has kept a copy.">
-            Your poster secret
-          </CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="border border-ink bg-white px-2 py-1 font-mono text-sm">{bounty.posterSecret}</code>
-            <CopyButton value={bounty.posterSecret} />
-          </div>
         </Card>
       )}
     </div>

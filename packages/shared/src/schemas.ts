@@ -20,17 +20,17 @@ export const createBountySchema = z.object({
   expiresInSeconds: z.number().int().min(600).max(7 * 86400).optional(),
 });
 
-// Signed-in workers pick a pull request (prNumber) on the bounty's repo or
-// give a link. Guest mode (no GitHub configured) needs a name and a link.
+// Workers pick a pull request (prNumber) on the bounty's repo or give a link.
 export const createSubmissionSchema = z
   .object({
-    workerName: z.string().trim().min(1).max(80).optional(),
     workUrl: z.url().optional(),
     prNumber: z.number().int().positive().optional(),
     notes: z.string().trim().max(5000).default(""),
     payoutInvoice: z.string().trim().min(20),
   })
   .refine((s) => s.workUrl || s.prNumber, { message: "a link to the work or a pull request is required", path: ["workUrl"] });
+
+export const roleSchema = z.object({ role: z.enum(["poster", "worker"]) });
 
 export const decisionSchema = z.object({
   submissionId: z.string().min(1),

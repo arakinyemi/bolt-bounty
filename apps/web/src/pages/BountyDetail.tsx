@@ -1,7 +1,7 @@
 import type { BountyDetail as Detail } from "@boltbounty/shared";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
-import { api, secrets, signInUrl, subscribe } from "../api";
+import { api, signInUrl, subscribe } from "../api";
 import { useAuth } from "../auth";
 import { Hash } from "../components/Copy";
 import { Progress } from "../components/Progress";
@@ -12,7 +12,7 @@ import { ago, sats, timeLeft } from "../format";
 
 export function BountyDetail() {
   const { id = "" } = useParams();
-  const { me, githubConfigured } = useAuth();
+  const { me, role } = useAuth();
   const [bounty, setBounty] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -40,12 +40,10 @@ export function BountyDetail() {
 
   if (!bounty) return <p className="text-sm text-muted">{error ?? "Loading…"}</p>;
 
-  // Poster = the signed-in account that created it, or the guest secret.
-  const secret = secrets.get(id);
-  const isPoster = (me !== null && me.id === bounty.posterUserId) || (bounty.posterUserId === null && secret !== null);
+  const isPoster = me !== null && me.id === bounty.posterUserId;
   const pending = bounty.submissions.filter((s) => !s.decision);
   const failedPayout = bounty.submissions.find((s) => s.decision === "approved" && s.payoutError);
-  const canSubmit = bounty.status === "funded" && pending.length === 0;
+  const open = bounty.status === "funded" && pending.length === 0;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
@@ -61,7 +59,7 @@ export function BountyDetail() {
           </div>
           <h1 className="display text-3xl sm:text-5xl">{bounty.title}</h1>
           <div className="label mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-muted">
-            {bounty.poster ? <span className="flex items-center gap-2"><Avatar src={bounty.poster.avatarUrl} alt={bounty.poster.login} size={20} /> {bounty.poster.login}</span> : <span>Guest poster</span>}
+            <span className="flex items-center gap-2"><Avatar src={bounty.poster.avatarUrl} alt={bounty.poster.login} size={20} /> {bounty.poster.login}</span>
             <span>Posted {ago(bounty.createdAt)}</span>
             {timeLeft(bounty.expiresAt, bounty.status) && <span>{timeLeft(bounty.expiresAt, bounty.status)}</span>}
           </div>
@@ -83,7 +81,7 @@ export function BountyDetail() {
               <li key={s.id} className="card bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-semibold">
-                    {s.worker && <Avatar src={s.worker.avatarUrl} alt={s.worker.login} size={20} />}
+                    <Avatar src={s.worker.avatarUrl} alt={s.worker.login} size={20} />
                     {s.workerName}
                   </span>
                   <Tag tone={s.decision === "approved" ? "green" : s.decision === "rejected" ? "pink" : "yellow"}>{s.decision ?? "awaiting decision"}</Tag>
@@ -95,10 +93,10 @@ export function BountyDetail() {
                 {s.payoutError && <p className="mt-2 border border-ink bg-pink-soft px-2 py-1 text-sm">Payout failed: {s.payoutError}</p>}
                 {isPoster && !s.decision && bounty.status === "submitted" && (
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Button variant="success" disabled={busy !== null} onClick={() => run("approve", () => api.approve(id, secret, s.id))}>
+                    <Button variant="success" disabled={busy !== null} onClick={() => run("approve", () => api.approve(id, s.id))}>
                       {busy === "approve" ? <><Spinner /> Settling and paying</> : "Approve and pay"}
                     </Button>
-                    <Button variant="secondary" disabled={busy !== null} onClick={() => run("reject", () => api.reject(id, secret, s.id))}>Reject</Button>
+                    <Button variant="secondary" disabled={busy !== null} onClick={() => run("reject", () => api.reject(id, s.id))}>Reject</Button>
                   </div>
                 )}
               </li>
@@ -122,12 +120,12 @@ export function BountyDetail() {
             <CardTitle tag={<Tag tone="ink">Poster</Tag>} hint="You created this bounty.">Your actions</CardTitle>
             <div className="flex flex-col gap-2">
               {bounty.status === "funded" && (
-                <Button variant="danger" disabled={busy !== null} onClick={() => run("cancel", () => api.cancel(id, secret))}>
+                <Button variant="danger" disabled={busy !== null} onClick={() => run("cancel", () => api.cancel(id))}>
                   {busy === "cancel" ? <><Spinner /> Cancelling</> : "Cancel and release the sats"}
                 </Button>
               )}
               {failedPayout && (
-                <Button disabled={busy !== null} onClick={() => run("retry", () => api.retryPayout(id, secret))}>
+                <Button disabled={busy !== null} onClick={() => run("retry", () => api.retryPayout(id))}>
                   {busy === "retry" ? <><Spinner /> Paying</> : "Retry payout"}
                 </Button>
               )}
@@ -135,14 +133,18 @@ export function BountyDetail() {
           </Card>
         )}
 
-        {canSubmit && (githubConfigured && !me ? (
+        {open && !me && (
           <Card tone="blue">
-            <CardTitle tag={<Tag tone="ink">Worker</Tag>} hint="Sign in to pick one of your pull requests and paste a payout invoice.">Claim this bounty</CardTitle>
+            <CardTitle tag={<Tag tone="ink">Workers</Tag>} hint="Sign in to pick one of your pull requests and paste a payout invoice.">Claim this bounty</CardTitle>
             <a href={signInUrl(`/b/${id}`)}><Button>Sign in with GitHub</Button></a>
           </Card>
-        ) : (
-          <SubmitForm bounty={bounty} guest={!me} onDone={reload} onError={setError} />
-        ))}
+        )}
+        {open && me && role === "worker" && <SubmitForm bounty={bounty} onDone={reload} onError={setError} />}
+        {open && me && role === "poster" && !isPoster && (
+          <Card>
+            <CardTitle tag={<Tag tone="ink">Posters</Tag>} hint="Only worker accounts can claim bounties. This one is waiting for a worker.">Open for claims</CardTitle>
+          </Card>
+        )}
       </aside>
     </div>
   );
@@ -179,10 +181,10 @@ function escrowText(b: Detail): string {
   }
 }
 
-function SubmitForm({ bounty, guest, onDone, onError }: { bounty: Detail; guest: boolean; onDone: () => void; onError: (m: string) => void }) {
+function SubmitForm({ bounty, onDone, onError }: { bounty: Detail; onDone: () => void; onError: (m: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [pr, setPr] = useState<number | null>(null);
-  const [useLink, setUseLink] = useState(!bounty.repoFullName || guest);
+  const [useLink, setUseLink] = useState(!bounty.repoFullName);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -191,7 +193,6 @@ function SubmitForm({ bounty, guest, onDone, onError }: { bounty: Detail; guest:
     setBusy(true);
     try {
       await api.submit(bounty.id, {
-        workerName: guest ? String(f.get("workerName")) : undefined,
         workUrl: useLink ? String(f.get("workUrl")) : undefined,
         prNumber: useLink ? undefined : pr!,
         notes: String(f.get("notes") ?? ""),
@@ -211,10 +212,7 @@ function SubmitForm({ bounty, guest, onDone, onError }: { bounty: Detail; guest:
         <CardTitle tag={<Tag tone="ink">Worker</Tag>} hint={`Pick your pull request and paste an invoice from your node for exactly ${sats(bounty.amountSats)}. You are paid the moment the poster approves.`}>
           Claim this bounty
         </CardTitle>
-        {guest && (
-          <Field id="workerName" label="Your name"><Input id="workerName" name="workerName" required maxLength={80} placeholder="ada" /></Field>
-        )}
-        {bounty.repoFullName && !guest && !useLink ? (
+        {bounty.repoFullName && !useLink ? (
           <Field id="pr" label="Pull request">
             <PullPicker repoFullName={bounty.repoFullName} value={pr} onChange={setPr} />
             <button type="button" onClick={() => setUseLink(true)} className="label mt-2 text-muted underline">Use a link instead</button>
@@ -222,7 +220,7 @@ function SubmitForm({ bounty, guest, onDone, onError }: { bounty: Detail; guest:
         ) : (
           <Field id="workUrl" label="Link to the work">
             <Input id="workUrl" name="workUrl" type="url" required placeholder="https://github.com/…/pull/1" />
-            {bounty.repoFullName && !guest && (
+            {bounty.repoFullName && (
               <button type="button" onClick={() => setUseLink(false)} className="label mt-2 text-muted underline">Pick a pull request instead</button>
             )}
           </Field>

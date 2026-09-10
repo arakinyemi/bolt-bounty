@@ -1,10 +1,10 @@
-import type { MeResponse } from "@boltbounty/shared";
+import { roleSchema, type MeResponse } from "@boltbounty/shared";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { SESSION_COOKIE, cookieOptions, createSession, currentUser, requireUser, setSessionCookie, toPublicUser } from "../auth.js";
 import { HttpError, type Ctx } from "../bounties/service.js";
 import { config } from "../config.js";
-import { sessions, users } from "../db/repo.js";
+import { sessions, submissions, users } from "../db/repo.js";
 import { github } from "../github/api.js";
 import { authorizeUrl, exchangeCode } from "../github/oauth.js";
 
@@ -46,6 +46,20 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: Ctx): void {
     setSessionCookie(reply, createSession(ctx.db, user.id));
     return reply.redirect(`${config.appUrl}${safeReturnTo(returnTo)}`);
   });
+
+  app.post("/me/role", async (req) => {
+    const user = requireUser(ctx.db, req);
+    const parsed = roleSchema.safeParse(req.body);
+    if (!parsed.success) throw new HttpError(400, "role must be poster or worker");
+    if (user.role && user.role !== parsed.data.role && users.hasActivity(ctx.db, user.id)) {
+      throw new HttpError(409, "this account already has bounties or submissions, so its role is fixed");
+    }
+    users.setRole(ctx.db, user.id, parsed.data.role);
+    return toPublicUser(users.get(ctx.db, user.id)!);
+  });
+
+  // The signed-in worker's submissions with their bounties, for "My work".
+  app.get("/me/submissions", async (req) => submissions.forWorker(ctx.db, requireUser(ctx.db, req).id));
 
   app.post("/auth/logout", async (req, reply) => {
     const token = req.cookies[SESSION_COOKIE];

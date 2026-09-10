@@ -70,20 +70,28 @@ The poster and worker nodes are driven from Polar during the demo.
 
 Status changes happen in one place, `apps/api/src/bounties/state.ts`.
 
-## GitHub integration
+## Accounts and roles
 
-Posters sign in with GitHub and pick one of their repositories. Workers sign
-in and pick one of the repo's open pull requests; the API verifies the pull
-request with the worker's own token before accepting the submission. Poster
-actions (approve, reject, cancel) are tied to the GitHub account that posted.
+Everyone signs in with GitHub, and every account is one of two roles, chosen
+on first sign-in:
+
+| Role | Can | Sees |
+|---|---|---|
+| Poster | pick a repo, fund a bounty, approve, reject, cancel | board with a "Mine" tab, post form |
+| Worker | claim a funded bounty with one of their open pull requests | board, "My work" with claims and sats earned |
+
+The API enforces the split: only posters create bounties, only workers submit,
+a poster can never claim their own bounty, and only the posting account can
+decide on a submission. A role can be changed until the account has any
+bounties or submissions, after which it is fixed.
+
+Pull requests are looked up with the worker's own token, so a submission is
+rejected unless the PR exists on the bounty's repo and is visible to them.
 
 Sessions are httpOnly cookies backed by a `sessions` table. OAuth uses a
 state cookie, and post-login redirects are restricted to same-origin paths.
-
-Without `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` the app runs in guest
-mode: anyone can post, the poster secret is the only poster auth, and workers
-submit a link plus a name. That keeps the demo runnable if OAuth is ever
-unavailable.
+The server refuses to start without `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET`.
 
 ## Setup
 
@@ -99,8 +107,8 @@ Requirements: Node 20+, pnpm, Docker, [Polar](https://lightningpolar.com).
 4. `pnpm lnd:check` should print the platform node's alias and two channels.
 5. `pnpm lnd:hodl-smoke` proves the escrow mechanic: pay the printed invoice
    from poster in Polar, then choose settle or cancel.
-6. Optional, for GitHub sign-in: create an OAuth App under GitHub Settings,
-   Developer settings, OAuth Apps. Homepage `http://localhost:5173`, callback
+6. Create a GitHub OAuth App under Settings, Developer settings, OAuth Apps.
+   Homepage `http://localhost:5173`, callback
    `http://localhost:5173/api/auth/github/callback`. Put the client id and
    secret in `.env`. The app requests `read:user` and `public_repo`, so only
    public repositories and their pull requests are listed.
@@ -130,7 +138,7 @@ invoices and clears the database. The demo run sheet is in
 - **Mainnet** with a 1 percent platform fee taken as a separate invoice, so
   escrow amounts stay exact.
 
-## Out of scope for the MVP
+## Out of scope
 
-Accounts and login, reputation, disputes, multiple competing submissions,
-Lightning Address payout, mainnet, mobile.
+Reputation, disputes, multiple competing submissions, Lightning Address
+payout, mainnet, mobile.

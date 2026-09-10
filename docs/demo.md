@@ -9,10 +9,12 @@ Rehearse this twice. Total time about four minutes.
 2. `pnpm lnd:check` prints OK with 2 active channels.
 3. `pnpm demo:reset` to cancel any stale hold invoices and clear the board.
 4. `pnpm dev`, then open http://localhost:5173 in one browser window and Polar
-   in another, side by side. Sign in with GitHub if the OAuth app is
-   configured; otherwise the board runs in guest mode and every step below
-   still works with a link instead of a pull request picker.
-5. In Polar, click **poster** and note its channel balance. Click **worker**
+   in another, side by side.
+5. You need two GitHub accounts: one signed in as a poster in a normal
+   window, one signed in as a worker in a private window. A poster cannot
+   claim their own bounty. The worker account needs an open pull request on
+   one of the poster's public repositories.
+6. In Polar, click **poster** and note its channel balance. Click **worker**
    and note its balance.
 
 Do not mine blocks during the demo. A held HTLC is force-cancelled by LND when
@@ -25,8 +27,8 @@ Show Polar. "Three LND nodes on regtest. Poster, our platform, worker. Two
 channels. The poster's balance is X sats."
 
 ### 2. Create a bounty (30 seconds)
-Board, **Post a bounty**. Pick one of your repositories, title "Fix broken
-link in README", amount 20000. Create. "The API generated a preimage, kept it, and asked our node for a hold
+As the poster: **Post a bounty**. Pick the repository, title "Fix broken link
+in README", amount 20000. Create. "The API generated a preimage, kept it, and asked our node for a hold
 invoice locked to its hash. Here is the invoice and the poster secret."
 
 ### 3. Fund it (45 seconds)
@@ -40,12 +42,11 @@ our node has accepted but cannot settle without the preimage."
 
 ### 4. Submit work (30 seconds)
 In Polar, click **worker**, Actions, **Create Invoice**, 20000 sats, copy it.
-In the browser open the bounty, pick the open pull request (or paste a link),
-paste the invoice, submit. Status turns **Submitted**. "Escrow is still
-locked."
+In the worker's window open the bounty, pick the open pull request, paste
+the invoice, submit. Status turns **Submitted**. "Escrow is still locked."
 
 ### 5. Approve (30 seconds)
-Click **Approve and pay**. Status turns **Paid**, and the page shows both the
+Back in the poster's window, click **Approve and pay**. Status turns **Paid**, and the page shows both the
 hold invoice hash and the payout hash.
 
 Show Polar: poster's payment is now complete, worker's balance is up 20,000.

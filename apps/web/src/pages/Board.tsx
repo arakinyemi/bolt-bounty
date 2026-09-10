@@ -1,22 +1,35 @@
 import type { BountyStatus, PublicBounty } from "@boltbounty/shared";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, subscribe } from "../api";
+import { api, signInUrl, subscribe } from "../api";
+import { useAuth } from "../auth";
 import { StatusPill } from "../components/StatusPill";
 import { Avatar, Button, EmptyState, ErrorBox, Tag } from "../components/ui";
 import { timeLeft } from "../format";
 
-const TABS: { label: string; statuses: BountyStatus[] | null; empty: string }[] = [
-  { label: "Open", statuses: ["funded"], empty: "No funded bounties are waiting for a worker right now." },
-  { label: "In review", statuses: ["submitted"], empty: "No submissions are waiting on a poster's decision." },
-  { label: "Paid", statuses: ["paid"], empty: "Nothing has been paid out yet." },
-  { label: "All", statuses: null, empty: "Post the first bounty to see it here." },
+interface Tab { label: string; empty: string; match: (b: PublicBounty, meId: string | null) => boolean }
+
+const STATUS_TABS: Tab[] = [
+  { label: "Open", empty: "No funded bounties are waiting for a worker right now.", match: (b) => b.status === "funded" },
+  { label: "In review", empty: "No submissions are waiting on a poster's decision.", match: (b) => b.status === "submitted" },
+  { label: "Paid", empty: "Nothing has been paid out yet.", match: (b) => b.status === "paid" },
+  { label: "All", empty: "Post the first bounty to see it here.", match: () => true },
 ];
+const MINE_TAB: Tab = { label: "Mine", empty: "You have not posted a bounty yet.", match: (b, meId) => b.posterUserId === meId };
+
+const HERO = {
+  poster: { title: <>Fund the work<span className="text-brand">.</span></>, text: "Pick a repo, lock the sats, and pay the moment you approve the pull request. Nobody holds the money in between." },
+  worker: { title: <>Get paid for PRs<span className="text-brand">.</span></>, text: "Every open bounty here is already funded and locked. Submit your pull request and the sats are yours on approval." },
+  none: { title: <>Open bounties<span className="text-brand">.</span></>, text: "Post a task, lock the sats on Lightning, pay the moment you approve the pull request. Nobody holds the money in between." },
+};
 
 export function Board() {
+  const { me, role } = useAuth();
   const [bounties, setBounties] = useState<PublicBounty[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
+  const TABS = role === "poster" ? [...STATUS_TABS, MINE_TAB] : STATUS_TABS;
+  const hero = HERO[role ?? "none"];
 
   useEffect(() => {
     api.list().then(setBounties).catch((e: Error) => setError(e.message));
@@ -27,10 +40,15 @@ export function Board() {
   }, []);
 
   const all = bounties ?? [];
-  const count = (statuses: BountyStatus[] | null) => all.filter((b) => !statuses || statuses.includes(b.status)).length;
+  const meId = me?.id ?? null;
+  const count = (t: Tab) => all.filter((b) => t.match(b, meId)).length;
   const sum = (statuses: BountyStatus[]) => all.filter((b) => statuses.includes(b.status)).reduce((n, b) => n + b.amountSats, 0);
-  const current = TABS[tab]!;
-  const shown = all.filter((b) => !current.statuses || current.statuses.includes(b.status));
+  const current = TABS[tab] ?? TABS[0]!;
+  const shown = all.filter((b) => current.match(b, meId));
+  const cta = role === "poster" ? <Link to="/new"><Button>Post a bounty</Button></Link>
+    : role === "worker" ? null
+    : me ? null
+    : <a href={signInUrl("/")}><Button>Sign in with GitHub</Button></a>;
 
   return (
     <div className="space-y-8">
@@ -41,15 +59,11 @@ export function Board() {
             <Tag tone="blue">Hold invoices</Tag>
             <Tag tone="pink">Regtest</Tag>
           </div>
-          <h1 className="display text-5xl sm:text-7xl">
-            Open<br />bounties<span className="text-brand">.</span>
-          </h1>
-          <p className="mt-5 max-w-lg text-base text-muted">
-            Post a task, lock the sats on Lightning, pay the moment you approve the pull request. Nobody holds the money in between.
-          </p>
+          <h1 className="display text-5xl sm:text-7xl">{hero.title}</h1>
+          <p className="mt-5 max-w-lg text-base text-muted">{hero.text}</p>
         </div>
         <dl className="grid grid-cols-3 divide-x-2 divide-ink border-2 border-ink bg-white shadow-hard">
-          <Stat value={count(["funded"])} label="Open" tone="text-blue" />
+          <Stat value={count(STATUS_TABS[0]!)} label="Open" tone="text-blue" />
           <Stat value={sum(["funded", "submitted"])} label="Sats locked" tone="text-yellow" />
           <Stat value={sum(["paid"])} label="Sats paid" tone="text-green" />
         </dl>
@@ -63,18 +77,18 @@ export function Board() {
               onClick={() => setTab(i)}
               className={`label border-2 border-ink px-3 py-2 font-semibold transition ${i === tab ? "bg-ink text-white shadow-hard-sm" : "bg-white hover:bg-paper"}`}
             >
-              {t.label} <span className={i === tab ? "text-white/60" : "text-muted"}>{count(t.statuses)}</span>
+              {t.label} <span className={i === tab ? "text-white/60" : "text-muted"}>{count(t)}</span>
             </button>
           ))}
         </div>
-        <Link to="/new"><Button>Post a bounty</Button></Link>
+        {cta}
       </div>
 
       <ErrorBox message={error} />
       {bounties === null && !error && <p className="text-sm text-muted">Loading…</p>}
 
       {bounties && shown.length === 0 && (
-        <EmptyState icon="⚡" title="Nothing here yet" text={current.empty} action={<Link to="/new"><Button>Post a bounty</Button></Link>} />
+        <EmptyState icon="⚡" title="Nothing here yet" text={current.empty} action={cta} />
       )}
 
       <ul className="grid gap-5 md:grid-cols-2">
@@ -89,7 +103,7 @@ export function Board() {
               <p className="mt-2 line-clamp-2 text-sm text-muted">{b.description}</p>
               <div className="mt-5 flex items-end justify-between gap-3 border-t border-ink/15 pt-4">
                 <div className="label flex items-center gap-2 text-muted">
-                  {b.poster ? <><Avatar src={b.poster.avatarUrl} alt={b.poster.login} size={20} /> {b.poster.login}</> : "Guest poster"}
+                  <Avatar src={b.poster.avatarUrl} alt={b.poster.login} size={20} /> {b.poster.login}
                   {timeLeft(b.expiresAt, b.status) && <span>· {timeLeft(b.expiresAt, b.status)}</span>}
                 </div>
                 <div className="text-right">
