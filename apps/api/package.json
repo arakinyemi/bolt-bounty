@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "lnd:check": "node --env-file=../../.env --import tsx src/scripts/lnd-check.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lnd:hodl-smoke": "node --env-file=../../.env --import tsx src/scripts/hodl-smoke.ts"
   },
   "dependencies": {
     "@boltbounty/shared": "workspace:*",

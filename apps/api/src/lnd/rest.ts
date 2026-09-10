@@ -28,14 +28,33 @@ export function lndPost<T>(path: string, body: unknown, hash: string | null = nu
   return request<T>("POST", path, body, hash);
 }
 
-async function request<T>(
-  method: "GET" | "POST",
-  path: string,
-  body: unknown,
-  hash: string | null,
-): Promise<T> {
+// For LND's server-streaming endpoints, which answer with one JSON object per
+// line. Yields each parsed line; the caller decides when it has seen enough.
+export async function* lndPostStream<T>(path: string, body: unknown, hash: string | null): AsyncGenerator<T> {
+  const res = await send("POST", path, body, hash);
+  if (!res.body) throw new LndError(`LND POST ${path} returned no body`);
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for await (const chunk of res.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let newline;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) yield JSON.parse(line) as T;
+    }
+  }
+  if (buffer.trim()) yield JSON.parse(buffer) as T;
+}
+
+async function request<T>(method: "GET" | "POST", path: string, body: unknown, hash: string | null): Promise<T> {
+  const res = await send(method, path, body, hash);
+  return (await res.json()) as T;
+}
+
+async function send(method: "GET" | "POST", path: string, body: unknown, hash: string | null): Promise<Response> {
   const url = config.lnd.restHost + path;
-  const label = `${method} ${path.split("?")[0]}`;
+  const label = `${method} ${path.split("?")[0].slice(0, 40)}`;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -49,11 +68,11 @@ async function request<T>(
     const cause = err instanceof Error && err.cause ? ` (${String(err.cause)})` : "";
     throw new LndError(`LND unreachable at ${url}${cause}`);
   }
-  const text = await res.text();
   if (!res.ok) {
+    const text = await res.text();
     logLnd(label, hash, `http ${res.status}`);
     throw new LndError(`LND ${label} failed with HTTP ${res.status}: ${text}`, res.status);
   }
   logLnd(label, hash, "ok");
-  return JSON.parse(text) as T;
+  return res;
 }

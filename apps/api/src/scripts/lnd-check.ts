@@ -1,18 +1,8 @@
+import { lnd } from "../lnd/client.js";
 import { lndGet } from "../lnd/rest.js";
 
 // pnpm lnd:check — proves the API can reach the platform node and that the
 // regtest topology from docs/polar.md exists (poster->platform, platform->worker).
-
-interface GetInfo {
-  alias: string;
-  identity_pubkey: string;
-  version: string;
-  block_height: number;
-  synced_to_chain: boolean;
-  num_active_channels: number;
-  num_pending_channels: number;
-  chains: { chain: string; network: string }[];
-}
 
 interface Channel {
   remote_pubkey: string;
@@ -22,7 +12,7 @@ interface Channel {
   active: boolean;
 }
 
-const info = await lndGet<GetInfo>("/v1/getinfo");
+const info = await lnd.getInfo();
 const { channels } = await lndGet<{ channels: Channel[] }>("/v1/channels");
 const network = info.chains[0]?.network ?? "unknown";
 

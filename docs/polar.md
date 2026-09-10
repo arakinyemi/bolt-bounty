@@ -69,6 +69,16 @@ pnpm lnd:check
 Prints the platform node's alias, pubkey and channels, and fails unless the
 node is on regtest, synced, and has two active channels.
 
+```
+pnpm lnd:hodl-smoke
+```
+
+Creates a 1,000-sat hold invoice on the platform node and prints it. Pay it
+from the poster node in Polar. The script reports ACCEPTED and then asks
+whether to settle or cancel. Run it once each way: settle should raise the
+platform's channel balance by 1,000 sats and complete the poster's payment;
+cancel should fail the poster's payment and leave both balances unchanged.
+
 Routing check (Phase 0 acceptance): create an invoice on worker and pay it from
 poster in the Polar UI. Success proves poster -> platform -> worker routing.
 
