@@ -1,28 +1,20 @@
 import type { BountyStatus } from "@boltbounty/shared";
 
-const STYLES: Record<BountyStatus, string> = {
-  unfunded: "bg-gray-100 text-gray-700",
-  funded: "bg-amber-100 text-amber-800",
-  submitted: "bg-blue-100 text-blue-800",
-  paid: "bg-green-100 text-green-800",
-  cancelled: "bg-red-100 text-red-800",
-  expired: "bg-red-100 text-red-800",
-};
-
-const LABELS: Record<BountyStatus, string> = {
-  unfunded: "Unfunded",
-  funded: "Funded · escrowed",
-  submitted: "Submitted",
-  paid: "Paid",
-  cancelled: "Cancelled",
-  expired: "Expired",
+const STYLES: Record<BountyStatus, { pill: string; dot: string; label: string }> = {
+  unfunded: { pill: "bg-stone-100 text-stone-700", dot: "bg-stone-400", label: "Awaiting funding" },
+  funded: { pill: "bg-amber-100 text-amber-900", dot: "bg-amber-500", label: "Funded · escrowed" },
+  submitted: { pill: "bg-sky-100 text-sky-900", dot: "bg-sky-500", label: "Work submitted" },
+  paid: { pill: "bg-emerald-100 text-emerald-900", dot: "bg-emerald-500", label: "Paid" },
+  cancelled: { pill: "bg-rose-100 text-rose-900", dot: "bg-rose-500", label: "Cancelled" },
+  expired: { pill: "bg-rose-100 text-rose-900", dot: "bg-rose-500", label: "Expired" },
 };
 
 export function StatusPill({ status }: { status: BountyStatus }) {
+  const s = STYLES[status];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${STYLES[status]}`}>
-      {status === "funded" && <span aria-hidden>🔒</span>}
-      {LABELS[status]}
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${s.pill}`}>
+      {status === "funded" ? <span aria-hidden>🔒</span> : <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />}
+      {s.label}
     </span>
   );
 }
