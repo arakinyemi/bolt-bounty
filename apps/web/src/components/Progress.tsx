@@ -20,7 +20,7 @@ export function Progress({ status }: { status: BountyStatus }) {
         return (
           <li key={step.key} className="flex items-center gap-2">
             <span className={`flex h-5 w-5 items-center justify-center rounded-full font-semibold ${tone}`}>{done || (last && failed) ? "✓" : i + 1}</span>
-            <span className={done || (last && failed) ? "font-medium text-stone-800" : "text-stone-500"}>{label}</span>
+            <span className={`hidden sm:inline ${done || (last && failed) ? "font-medium text-stone-800" : "text-stone-500"}`}>{label}</span>
             {!last && <span className="mx-1 h-px w-6 bg-stone-300" aria-hidden />}
           </li>
         );

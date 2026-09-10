@@ -13,7 +13,7 @@ export function Layout() {
           </Link>
           <nav className="flex items-center gap-1">
             <NavLink to="/" end className={link}>Board</NavLink>
-            <NavLink to="/how" className={link}>How it works</NavLink>
+            <NavLink to="/how" className={(s) => `hidden sm:block ${link(s)}`}>How it works</NavLink>
             <NavLink to="/new" className="ml-2 rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-semibold text-stone-900 shadow-sm transition hover:bg-amber-300">
               Post a bounty
             </NavLink>
