@@ -7,7 +7,8 @@
     "lnd:check": "node --env-file=../../.env --import tsx src/scripts/lnd-check.ts",
     "test": "vitest run",
     "lnd:hodl-smoke": "node --env-file=../../.env --import tsx src/scripts/hodl-smoke.ts",
-    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts"
+    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
+    "demo:reset": "node --env-file=../../.env --import tsx src/scripts/reset-demo.ts"
   },
   "dependencies": {
     "@boltbounty/shared": "workspace:*",

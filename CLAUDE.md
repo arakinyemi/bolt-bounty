@@ -32,6 +32,8 @@ Lightning-escrowed micro-bounty board. Hackathon MVP, regtest only.
 - pnpm dev            (runs api on :3000 and web on :5173)
 - pnpm test           (vitest, api only)
 - pnpm lnd:check      (verifies connectivity to the platform node)
+- pnpm lnd:hodl-smoke (interactive hold invoice settle/cancel test)
+- pnpm demo:reset     (cancels open hold invoices, deletes the database)
 
 ## Testing against Polar
 See docs/polar.md for node names, ports, and the funding script.
