@@ -11,7 +11,14 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
     headers: body === undefined ? headers : { "content-type": "application/json", ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const json = (await res.json()) as T & { error?: string };
+  const text = await res.text();
+  let json: T & { error?: string };
+  try {
+    json = JSON.parse(text) as T & { error?: string };
+  } catch {
+    // HTML here means something other than the api answered on the api port.
+    throw new Error(`The API did not answer ${path} (HTTP ${res.status}, not JSON). Check that the api is running on the port in .env and nothing else is using it.`);
+  }
   if (!res.ok) throw new Error(json.error ?? `${method} ${path} failed with ${res.status}`);
   return json;
 }

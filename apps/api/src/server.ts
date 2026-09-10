@@ -74,6 +74,15 @@ if (process.argv[1]?.endsWith("server.ts")) {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => app.close().then(() => process.exit(0)));
   }
-  await app.listen({ port: config.port, host: process.env.HOST ?? "127.0.0.1" });
+  try {
+    await app.listen({ port: config.port, host: process.env.HOST ?? "127.0.0.1" });
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code === "EADDRINUSE") {
+      console.error(`[api] port ${config.port} is already in use by another process. Stop it or change PORT in .env (the web proxy follows it).`);
+      process.exit(1);
+    }
+    throw err;
+  }
   console.log(`[api] listening on http://127.0.0.1:${config.port}${serveWeb ? " and serving apps/web/dist" : ""}`);
 }
