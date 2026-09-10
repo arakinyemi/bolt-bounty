@@ -82,8 +82,11 @@ cancel should fail the poster's payment and leave both balances unchanged.
 Routing check (Phase 0 acceptance): create an invoice on worker and pay it from
 poster in the Polar UI. Success proves poster -> platform -> worker routing.
 
-## Funding script
+## Integration tests
 
-The Phase 3 integration tests pay hold invoices from the poster node through
-its REST API using the poster node's admin macaroon. That script is documented here once
-it exists.
+`pnpm test` runs the unit tests and `apps/api/test/lifecycle.live.test.ts`,
+which drives the full lifecycle against this network: the poster node pays
+hold invoices and the worker node issues payout invoices, both through their
+own REST APIs. It needs the `TEST_POSTER_*` and `TEST_WORKER_*` variables in
+`.env` (see `.env.example`) pointing at those nodes' cert and macaroon files.
+Each run moves a few thousand sats from poster to worker.

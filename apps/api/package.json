@@ -6,12 +6,15 @@
   "scripts": {
     "lnd:check": "node --env-file=../../.env --import tsx src/scripts/lnd-check.ts",
     "test": "vitest run",
-    "lnd:hodl-smoke": "node --env-file=../../.env --import tsx src/scripts/hodl-smoke.ts"
+    "lnd:hodl-smoke": "node --env-file=../../.env --import tsx src/scripts/hodl-smoke.ts",
+    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts"
   },
   "dependencies": {
     "@boltbounty/shared": "workspace:*",
     "better-sqlite3": "^12.2.0",
-    "undici": "^7.10.0"
+    "fastify": "^5.4.0",
+    "undici": "^7.10.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

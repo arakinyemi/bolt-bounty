@@ -36,4 +36,19 @@ export interface Submission {
   createdAt: string;
   decidedAt: string | null;
   decision: "approved" | "rejected" | null;
+  payoutError: string | null;  // set when the hold invoice settled but paying the worker failed
+}
+
+// What the API returns. The poster secret is only ever returned at creation.
+export type PublicBounty = Omit<Bounty, "posterSecret">;
+export type BountyDetail = PublicBounty & { submissions: Submission[] };
+
+// Server-sent event emitted on every status transition.
+export interface StatusChange {
+  bountyId: string;
+  from: BountyStatus;
+  to: BountyStatus;
+  event: string;
+  at: string;
+  bounty: PublicBounty;
 }
