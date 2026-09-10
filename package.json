@@ -1,0 +1,16 @@
+{
+  "name": "boltbounty",
+  "private": true,
+  "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "test": "pnpm --filter @boltbounty/api test",
+    "lnd:check": "pnpm --filter @boltbounty/api lnd:check"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+data/
+*.macaroon
+*.cert
+*.key
+.DS_Store
